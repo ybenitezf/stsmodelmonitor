@@ -77,7 +77,7 @@ def get_pipeline(
     model_package_group_name="stsPackageGroup",
     pipeline_name="stsPipeline",
     base_job_prefix="sts",
-):
+) -> Pipeline:
     """Gets a SageMaker ML Pipeline instance working with on sts data.
 
     Args:
