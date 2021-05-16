@@ -1,6 +1,17 @@
+"""Execute a sagemaker pipeline
+
+This will use the fallowing cofigs from enviroment variables:
+
+- AWS_DEFAULT_REGION
+- ROLE_ARN
+- PIPELINE_NAME
+- MODEL_PACKAGE_GROUP_NAME
+- BASE_JOB_PREFIX
+"""
 from sts.pipeline import get_pipeline
 from dotenv import load_dotenv
 import sagemaker
+import pprint
 import logging
 import json
 import os
@@ -50,7 +61,8 @@ def main():
         execution.wait()
 
 
-        _l.info(f"Pipeline finished: {execution.list_steps()}")
+        _l.info(
+            f"Pipeline finished: {pprint.pformat(execution.list_steps())}")
     except Exception as e:
         _l.exception(f"Exception: {e}")
 

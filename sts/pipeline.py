@@ -100,6 +100,22 @@ def get_pipeline(
         ml.r5.4xlarge, ml.m5.12xlarge, ml.m4.xlarge, ml.t3.large, ml.m5.24xlarge, 
         ml.m4.2xlarge, ml.m5.2xlarge, ml.p2.8xlarge, ml.r5.8xlarge, ml.r5.xlarge, 
         ml.r5.large, ml.p3.8xlarge, ml.m4.4xlarge
+
+        REVIEW: For taining it need to be one of:  
+
+        ml.p2.xlarge, ml.m5.4xlarge, ml.m4.16xlarge, ml.p4d.24xlarge, 
+        ml.c5n.xlarge, ml.p3.16xlarge, ml.m5.large, ml.p2.16xlarge, 
+        ml.c4.2xlarge, ml.c5.2xlarge, ml.c4.4xlarge, ml.c5.4xlarge, 
+        ml.c5n.18xlarge, ml.g4dn.xlarge, ml.g4dn.12xlarge, ml.c4.8xlarge, 
+        ml.g4dn.2xlarge, ml.c5.9xlarge, ml.g4dn.4xlarge, ml.c5.xlarge, 
+        ml.g4dn.16xlarge, ml.c4.xlarge, ml.g4dn.8xlarge, ml.c5n.2xlarge, 
+        ml.c5n.4xlarge, ml.c5.18xlarge, ml.p3dn.24xlarge, ml.p3.2xlarge, 
+        ml.m5.xlarge, ml.m4.10xlarge, ml.c5n.9xlarge, ml.m5.12xlarge, 
+        ml.m4.xlarge, ml.m5.24xlarge, ml.m4.2xlarge, ml.p2.8xlarge, 
+        ml.m5.2xlarge, ml.p3.8xlarge, ml.m4.4xlarge
+
+        see
+        https://aws.amazon.com/blogs/machine-learning/right-sizing-resources-and-avoiding-unnecessary-costs-in-amazon-sagemaker/
     """
     sagemaker_session = get_session(region, default_bucket)
     if role is None:
@@ -108,10 +124,12 @@ def get_pipeline(
     # parameters for pipeline execution
     processing_instance_count = ParameterInteger(name="ProcessingInstanceCount", default_value=1)
     processing_instance_type = ParameterString(
-        name="ProcessingInstanceType", default_value="ml.m5.large"
+        name="ProcessingInstanceType", default_value="ml.m5.xlarge"
     )
+
+    # as of free tier of 50 hours of m4.xlarge or m5.xlarge instances
     training_instance_type = ParameterString(
-        name="TrainingInstanceType", default_value="ml.m5.large"
+        name="TrainingInstanceType", default_value="ml.m5.xlarge"
     )
     model_approval_status = ParameterString(
         name="ModelApprovalStatus", default_value="Approved"
@@ -280,8 +298,8 @@ def get_pipeline(
         model_data=step_train.properties.ModelArtifacts.S3ModelArtifacts,
         content_types=["text/csv"],
         response_types=["text/csv"],
-        inference_instances=["ml.m5.large"],
-        transform_instances=["ml.m5.large"],
+        inference_instances=["ml.m5.xlarge"],
+        transform_instances=["ml.m5.xlarge"],
         model_package_group_name=model_package_group_name,
         approval_status=model_approval_status,
         model_metrics=model_metrics,
