@@ -17,6 +17,7 @@ import os
 import logging
 import pprint
 import datetime
+import time
 
 
 _l = logging.getLogger()
@@ -74,7 +75,7 @@ def get_approved_package(model_package_group_name):
         model_package_arn = approved_packages[0]["ModelPackageArn"]
         _l.info(
             f"Identified the latest approved model package: {model_package_arn}")
-        _l.info(f"Model package info {approved_packages[0]}")
+        _l.debug(f"Model package info {approved_packages[0]}")
         return model_package_arn
     except ClientError as e:
         error_message = e.response["Error"]["Message"]
@@ -97,7 +98,7 @@ def main():
     _l.info(f"Latest approved model package: {model_package_arn}")
     description = sm_client.describe_model_package(
         ModelPackageName=model_package_arn)
-    _l.info(f"Model package info: {pprint.pformat(description)}")
+    _l.debug(f"Model package info: {pprint.pformat(description)}")
 
     # register the model in sagemaker model registry
     ahora = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
@@ -111,50 +112,92 @@ def main():
         ExecutionRoleArn=ROLE_ARN,
         PrimaryContainer=primary_container
     )
-    _l.info(f"Model arn : {response}")
+    _l.debug(f"Create model response: {response}")
+    _l.info(f"Model ARN: {response.get('ModelArn')}")
     # -- END register model
 
     ######  with the model registered we can deploy the endpoint #####
 
-    # First we create a DataCaptureConfig for the endpoint
-    bucket =  sagemaker.session.Session(boto3.Session()).default_bucket()
+    # Set some paths and vars needed
+    sagemaker_session = sagemaker.session.Session(boto3.Session())
+    bucket =  sagemaker_session.default_bucket()
     data_capture_prefix = f'{BASE_JOB_PREFIX}/datacapture'
     s3_capture_upload_path = 's3://{}/{}'.format(bucket, data_capture_prefix)
     _l.info(f"Capture path: {s3_capture_upload_path}")
-    data_capture_config = sagemaker.model_monitor.DataCaptureConfig(
-        enable_capture=True,
-        sampling_percentage=100,  # TODO: reduce in production
-        destination_s3_uri=s3_capture_upload_path
-    )._to_request_dict()
-    _l.info(f"DataCaptureConfig: {pprint.pformat(data_capture_config)}")
-
 
     # Create an endpoint configuration by calling create_endpoint_config.
     # The endpoint configuration specifies the number and type of Amazon EC2
     # instances to use for the endpoint. It can also contain the
     # DataCaptureConfig
     endpoint_config_name = f'sts-model-EndpointConfig-{ahora}'
-    _l.info(f"Creating EndpointConfig: {endpoint_config_name}")
-    create_endpoint_config_response = sm_client.create_endpoint_config(
-        EndpointConfigName=endpoint_config_name,
-        ProductionVariants=[
-            {
-                'InstanceType': 'ml.m5.xlarge',
-                'InitialVariantWeight': 1,
-                'InitialInstanceCount': 1,
-                'ModelName': model_name,
-                'VariantName': 'AllTraffic'
-            }
-        ],
-        DataCaptureConfig=data_capture_config
+    sagemaker_session.create_endpoint_config(
+        name=endpoint_config_name,
+        model_name=model_name,
+        initial_instance_count=1,
+        instance_type='ml.m5.xlarge',
+        data_capture_config_dict=sagemaker.model_monitor.DataCaptureConfig(
+            enable_capture=True,
+            sampling_percentage=100,  # TODO: reduce in production
+            destination_s3_uri=s3_capture_upload_path
+        )._to_request_dict()
     )
-    # the aws docs sugest to call describe_endpoint_config before asuming the
-    # config comes truth, something to do with DynamoDB write cache.
-    _l.info(f"""EndpointConfig: {pprint.pformat(
-        sm_client.describe_endpoint_config(
-            EndpointConfigName=endpoint_config_name
-        )
-    )}""")
+
+    # Create the endpoint using the EndPointConfig
+    endpoint_name = f'sts-model-Endpoint-{ahora}'
+    _l.info(f"Endpoint name: {endpoint_name}")
+
+    sagemaker_session.create_endpoint(
+        endpoint_name,
+        endpoint_config_name,
+        wait=True
+    )
+
+    _l.info(f"Endpoint {endpoint_name} ready")
+
+    # create_endpoint_response = sm_client.create_endpoint(
+    #     EndpointName=endpoint_name,
+    #     EndpointConfigName=endpoint_config_name)
+    # _l.debug(f"Create endpoint response: {create_endpoint_response}")
+    # _l.info(f"EndPoint ARN: {create_endpoint_response['EndpointArn']}")
+
+    # # wait until the endpoint comes into service
+    # _l.info("Waiting for the endpoint...")
+    # sagemaker_session.wait_for_endpoint(endpoint_name)
+    # describe_endpoint_response = sm_client.describe_endpoint(
+    #     EndpointName=endpoint_name)
+    # response_status = describe_endpoint_response["EndpointStatus"]
+    # _l.info(f"Endpoint status: {response_status}")
+    # _l.info(
+    #     f"Endpoint description: {pprint.pformat(describe_endpoint_response)}")
+
+    # try:
+    #     while response_status not in ['InService', 'Failed']:
+    #         time.sleep(5) # wait for 5 sec
+    #         describe_endpoint_response = sm_client.describe_endpoint(
+    #             EndpointName=endpoint_name)
+    #         response_status = describe_endpoint_response["EndpointStatus"]
+    #         _l.info(f"Waiting for the endpoint status: {response_status}")
+
+
+    #     if response_status == 'Failed':
+    #         _l.error("Endpoint could not be created, updated, or re-scaled")
+    #         _l.error(describe_endpoint_response['FailureReason'])
+    #         raise ValueError
+
+    #     _l.info(f"Endpoint description: {describe_endpoint_response}")
+    # except ClientError as e:
+    #     error_message = e.response["Error"]["Message"]
+    #     _l.error(error_message)
+    #     raise Exception(error_message)
+    # except ValueError as ve:
+    #     # Can't create the endpoint, clean up the created resources:
+    #     # remove the endpoint config
+    #     # remove the model
+    #     raise ve
+    # # --
+
+
+    ### ENDPOINT deploy done
 
 
 
