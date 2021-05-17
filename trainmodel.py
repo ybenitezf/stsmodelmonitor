@@ -52,8 +52,8 @@ def main():
 
         # output debug information
         parsed = json.loads(pipe.definition())
-        _l.debug('ML Pipeline definition')
-        _l.debug(json.dumps(parsed, indent=2, sort_keys=True))
+        _l.info('ML Pipeline definition')
+        _l.info(json.dumps(parsed, indent=2, sort_keys=True))
 
         # Created/Updated SageMaker Pipeline
         upsert_response = pipe.upsert(role_arn=ROLE_ARN)
@@ -84,6 +84,7 @@ def main():
             _l.info(f"{s3_out}/baseline.csv")
     except Exception as e:
         _l.exception(f"Exception: {e}")
+
 
 
 if __name__=="__main__":
