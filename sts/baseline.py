@@ -51,5 +51,5 @@ if __name__ == "__main__":
         header=['prediction', 'label'])
 
     logger.info(
-        f"Model quality baseline dataset in {output_dir}/dataset.csv")
+        f"Model quality baseline dataset in {output_dir}/baseline.csv")
 

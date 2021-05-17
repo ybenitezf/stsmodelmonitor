@@ -249,37 +249,37 @@ def get_pipeline(
         property_files=[evaluation_report],
     )
 
-    # setup model monitoring baseline data
-    # script_process_baseline_data = ScriptProcessor(
-    #     image_uri=image_uri,
-    #     command=["python3"],
-    #     instance_type=processing_instance_type,
-    #     instance_count=1,
-    #     base_job_name=f"{base_job_prefix}/baseline",
-    #     sagemaker_session=sagemaker_session,
-    #     role=role,
-    # )
+    # setup model quality monitoring baseline data
+    script_process_baseline_data = ScriptProcessor(
+        image_uri=image_uri,
+        command=["python3"],
+        instance_type=processing_instance_type,
+        instance_count=1,
+        base_job_name=f"{base_job_prefix}/baseline",
+        sagemaker_session=sagemaker_session,
+        role=role,
+    )
 
-    # step_proccess_baseline_data = ProcessingStep(
-    #     name="SetupMonitoringData",
-    #     processor=script_process_baseline_data,
-    #     inputs=[
-    #         ProcessingInput(
-    #             source=step_train.properties.ModelArtifacts.S3ModelArtifacts,
-    #             destination="/opt/ml/processing/model",
-    #         ),
-    #         ProcessingInput(
-    #             source=step_preprocess.properties.ProcessingOutputConfig.Outputs[
-    #                 "validation"
-    #             ].S3Output.S3Uri,
-    #             destination="/opt/ml/processing/validation",
-    #         ),
-    #     ],
-    #     outputs=[
-    #         ProcessingOutput(output_name="validate", source="/opt/ml/processing/validate"),
-    #     ],
-    #     code=os.path.join(BASE_DIR, "baseline.py")
-    # )
+    step_proccess_baseline_data = ProcessingStep(
+        name="SetupMonitoringData",
+        processor=script_process_baseline_data,
+        inputs=[
+            ProcessingInput(
+                source=step_train.properties.ModelArtifacts.S3ModelArtifacts,
+                destination="/opt/ml/processing/model",
+            ),
+            ProcessingInput(
+                source=step_preprocess.properties.ProcessingOutputConfig.Outputs[
+                    "validation"
+                ].S3Output.S3Uri,
+                destination="/opt/ml/processing/validation",
+            ),
+        ],
+        outputs=[
+            ProcessingOutput(output_name="validate", source="/opt/ml/processing/validate"),
+        ],
+        code=os.path.join(BASE_DIR, "baseline.py")
+    )
     # ---
 
     # register model step that will be conditionally executed
@@ -317,8 +317,8 @@ def get_pipeline(
     step_cond = ConditionStep(
         name="CheckMSESTSEvaluation",
         conditions=[cond_lte],
-        # if_steps=[step_register, step_proccess_baseline_data],
-        if_steps=[step_register],
+        if_steps=[step_register, step_proccess_baseline_data],
+        # if_steps=[step_register],
         else_steps=[],
     )
 

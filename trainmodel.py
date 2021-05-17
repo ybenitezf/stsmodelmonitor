@@ -21,6 +21,11 @@ _l.addHandler(logging.StreamHandler())
 _l.setLevel(logging.INFO)
 load_dotenv()
 
+def extract_step_from_list(steps, step_to_extract) -> dict:
+    for step in steps:
+        if step.get('Name') in step_to_extract:
+            return step
+
 
 def main():
     # define some configurations from env
@@ -47,12 +52,12 @@ def main():
 
         # output debug information
         parsed = json.loads(pipe.definition())
-        _l.info('ML Pipeline definition')
-        _l.info(json.dumps(parsed, indent=2, sort_keys=True))
+        _l.debug('ML Pipeline definition')
+        _l.debug(json.dumps(parsed, indent=2, sort_keys=True))
 
         # Created/Updated SageMaker Pipeline
         upsert_response = pipe.upsert(role_arn=ROLE_ARN)
-        _l.info(f"C/U SageMaker Pipeline: Response received: {upsert_response}")
+        _l.debug(f"C/U SageMaker Pipeline: Response received: {upsert_response}")
 
 
         _l.info("Starting the SageMaker pipeline")
@@ -61,8 +66,22 @@ def main():
         execution.wait()
 
 
-        _l.info(
-            f"Pipeline finished: {pprint.pformat(execution.list_steps())}")
+        _l.info("Pipeline finished: !!!")
+        _l.debug(f"{pprint.pformat(execution.list_steps())}")
+
+        # Take the s3 uri of the baseline datatase baseline.csv
+        mse_step = extract_step_from_list(
+            parsed.get('Steps'), 'CheckMSESTSEvaluation')
+        mon_step = extract_step_from_list(
+            mse_step.get('Arguments').get('IfSteps'),
+            'SetupMonitoringData'
+        )
+        outputs = mon_step.get(
+            'Arguments')['ProcessingOutputConfig']['Outputs']
+        for o in outputs:
+            s3_out = o.get('S3Output').get('S3Uri')
+            _l.info(f"Output of {mon_step.get('Name')}")
+            _l.info(f"{s3_out}/baseline.csv")
     except Exception as e:
         _l.exception(f"Exception: {e}")
 
