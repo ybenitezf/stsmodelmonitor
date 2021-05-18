@@ -8,6 +8,7 @@ This will use the fallowing cofigs from enviroment variables:
 - MODEL_PACKAGE_GROUP_NAME
 - BASE_JOB_PREFIX
 """
+from typing import List
 from sts.pipeline import get_pipeline
 from dotenv import load_dotenv
 import sagemaker
@@ -17,14 +18,35 @@ import json
 import os
 
 _l = logging.getLogger()
-_l.addHandler(logging.StreamHandler())
+logFormatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+consoleHandler = logging.StreamHandler()
+consoleHandler.setFormatter(logFormatter)
+_l.addHandler(consoleHandler)
 _l.setLevel(logging.INFO)
 load_dotenv()
 
 def extract_step_from_list(steps, step_to_extract) -> dict:
+    """extract the step definition from a list of pipeline steps"""
     for step in steps:
         if step.get('Name') in step_to_extract:
             return step
+
+def get_outputs(step: dict) -> List[str]:
+    """Returns the S3 uri outputs if present
+    
+    step: step definition in the pipeline
+    """
+    response = []
+    try:
+        outputs = step.get(
+            'Arguments')['ProcessingOutputConfig']['Outputs']
+        for o in outputs:
+            s3_out = o.get('S3Output').get('S3Uri')
+            response.append(s3_out)
+    except Exception as e:
+        _l.debug(f"Error geting the outputs of {step.get('Name')}")
+
+    return response
 
 
 def main():
@@ -76,12 +98,16 @@ def main():
             mse_step.get('Arguments').get('IfSteps'),
             'SetupMonitoringData'
         )
-        outputs = mon_step.get(
-            'Arguments')['ProcessingOutputConfig']['Outputs']
-        for o in outputs:
-            s3_out = o.get('S3Output').get('S3Uri')
-            _l.info(f"Output of {mon_step.get('Name')}")
-            _l.info(f"{s3_out}/baseline.csv")
+        for o in get_outputs(mon_step):
+            _l.info(f"{mon_step.get('Name')} output: {o}/baseline.csv")
+
+        # take de s3 uri of train, validate, and test datasets
+        train_step_def = extract_step_from_list(
+            parsed.get('Steps'), 'PreprocessSTSData')
+        _l.warning("Remember to add the file name at the end")
+        for o in get_outputs(train_step_def):
+            _l.info(f"PreprocessSTSData output: {o}")
+        # --
     except Exception as e:
         _l.exception(f"Exception: {e}")
 
