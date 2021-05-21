@@ -10,8 +10,10 @@ This will use the fallowing cofigs from enviroment variables:
 """
 from typing import List
 from sts.pipeline import get_pipeline
+from sts.utils import get_sm_session
 from dotenv import load_dotenv
 import sagemaker
+import boto3
 import pprint
 import logging
 import json
@@ -25,15 +27,17 @@ _l.addHandler(consoleHandler)
 _l.setLevel(logging.INFO)
 load_dotenv()
 
+
 def extract_step_from_list(steps, step_to_extract) -> dict:
     """extract the step definition from a list of pipeline steps"""
     for step in steps:
         if step.get('Name') in step_to_extract:
             return step
 
+
 def get_outputs(step: dict) -> List[str]:
     """Returns the S3 uri outputs if present
-    
+
     step: step definition in the pipeline
     """
     response = []
@@ -54,6 +58,16 @@ def main():
 
     # AWS especific
     AWS_DEFAULT_REGION = os.getenv('AWS_DEFAULT_REGION', 'eu-west-1')
+    AWS_PROFILE = os.getenv('AWS_PROFILE', 'default')
+    AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID', None)
+    AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY', None)
+    b3_session, sm_client, sm_runtime, sm_session = get_sm_session(
+        region=AWS_DEFAULT_REGION,
+        profile_name=AWS_PROFILE,
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY
+    )
+
     ROLE_ARN = os.getenv('AWS_ROLE', sagemaker.get_execution_role())
 
     # MLOps especific
@@ -65,12 +79,12 @@ def main():
     try:
         # define the ml pipeline for training
         pipe = get_pipeline(
-            region=AWS_DEFAULT_REGION,
+            AWS_DEFAULT_REGION,
+            sm_session,
             role=ROLE_ARN,
             pipeline_name=PIPELINE_NAME,
             model_package_group_name=MODEL_PACKAGE_GROUP_NAME,
             base_job_prefix=BASE_JOB_PREFIX)
-
 
         # output debug information
         parsed = json.loads(pipe.definition())
@@ -79,14 +93,13 @@ def main():
 
         # Created/Updated SageMaker Pipeline
         upsert_response = pipe.upsert(role_arn=ROLE_ARN)
-        _l.debug(f"C/U SageMaker Pipeline: Response received: {upsert_response}")
-
+        _l.debug(
+            f"C/U SageMaker Pipeline: Response received: {upsert_response}")
 
         _l.info("Starting the SageMaker pipeline")
         execution = pipe.start()
         _l.info("Waiting for the pipeline")
         execution.wait()
-
 
         _l.info("Pipeline finished: !!!")
         _l.debug(f"{pprint.pformat(execution.list_steps())}")
@@ -112,5 +125,5 @@ def main():
         _l.exception(f"Exception: {e}")
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     main()
