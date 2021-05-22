@@ -1,23 +1,17 @@
 from sts.utils import load_dataset, get_sm_session
 from dotenv import load_dotenv
 import os
-import logging
 import argparse
-import boto3
 import json
-import time
+import progressbar
 
-_l = logging.getLogger()
-logFormatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-consoleHandler = logging.StreamHandler()
-consoleHandler.setFormatter(logFormatter)
-_l.addHandler(consoleHandler)
-_l.setLevel(logging.INFO)
+
 load_dotenv()
 
 
-def main(endpoint_name: str, test_dataset_uri: str):
+def main(deploy_data, train_data):
     inference_id_prefix = 'sts_'  # Comes from deploymodel.py
+    outputs = {'inferences': []}
 
     # AWS especific
     AWS_DEFAULT_REGION = os.getenv('AWS_DEFAULT_REGION', 'eu-west-1')
@@ -33,41 +27,69 @@ def main(endpoint_name: str, test_dataset_uri: str):
 
     # read test data
     test_data = load_dataset(
-        test_dataset_uri, 'test.csv', sagemaker_session=sm_session)
-    _l.info(f"Loadding {test_dataset_uri}")
-    _l.debug(f"Test dataset head: {test_data.head()}")
+        train_data['train']['test'], 'test.csv', sagemaker_session=sm_session)
+    print(f"Loadding {train_data['train']['test']}")
+    print("Test dataset head:")
+    print(test_data.head())
 
     # remove labels in the test dataset
     test_data.drop(test_data.columns[0], axis=1, inplace=True)
 
-    # Iterate over the test data and call the endpoint for each row
+    # Iterate over the test data and call the endpoint for each row, 
+    # stop for 2 seconds for rows divisible by 3, just to make time
     x_test_rows = test_data.values.tolist()
-    for index, x_test_row in enumerate(x_test_rows, start=1):
-        x_test_row_string = ','.join(map(str, x_test_row))
-        # Auto-generate an inference-id to track the request/response in the captured data
-        inference_id = '{}{}'.format(inference_id_prefix, index)
+    print(
+        f"Sending trafic to the endpoint: {deploy_data['endpoint']['name']}")
+    with progressbar.ProgressBar(max_value=len(x_test_rows)) as bar:
+        for index, x_test_row in enumerate(x_test_rows, start=1):
+            x_test_row_string = ','.join(map(str, x_test_row))
+            # Auto-generate an inference-id to track the request/response 
+            # in the captured data
+            inference_id = '{}{}'.format(inference_id_prefix, index)
 
-        response = sm_runtime.invoke_endpoint(
-            EndpointName=endpoint_name,
-            ContentType='text/csv',
-            Body=x_test_row_string,
-            InferenceId=inference_id
-        )
-        result = json.loads(response['Body'].read().decode())
-        _l.debug(f"Result: {result} for {x_test_row_string}")
-        _l.info(f"% {(100*index)//len(x_test_rows)}")
-        if (index % 3) == 0:
-            time.sleep(1)
+            response = sm_runtime.invoke_endpoint(
+                EndpointName=deploy_data['endpoint']['name'],
+                ContentType='text/csv',
+                Body=x_test_row_string,
+                InferenceId=inference_id
+            )
+            result = json.loads(response['Body'].read().decode())
+            outputs['inferences'].append(
+                {
+                    inference_id: {
+                        'input': x_test_row,
+                        'result': result
+                    }
+                }
+            )
+
+            # show progress
+            bar.update(index)
+    
+    with open('testendpoint_out.json', 'w') as f:
+        json.dump(outputs, f)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--endpoint", type=str, required=True,
-        help="Endpoint name")
+        "--deploymodel-output", type=str, required=False, 
+        default='deploymodel_out.json',
+        help="JSON output from the deploy script"
+    )
     parser.add_argument(
-        "--test-set-uri", type=str, required=True,
-        help="S3 uri for the test dataset")
+        "--trainmodel-output", type=str, required=False, 
+        default='trainmodel_out.json',
+        help="JSON output from the train script"
+    )
 
     args, _ = parser.parse_known_args()
-    main(args.endpoint, args.test_set_uri)
+    print(f"Using deploy info {args.deploymodel_output}")
+    print(f"Using training info {args.trainmodel_output}")
+    with open(args.deploymodel_output) as f:
+        deploy_data = json.load(f)
+
+    with open(args.trainmodel_output) as f:
+        train_data = json.load(f)
+
+    main(deploy_data, train_data)

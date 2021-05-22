@@ -90,7 +90,8 @@ def get_approved_package(model_package_group_name, sm_client):
         raise Exception(error_message)
 
 
-def main(baseline_dataset_uri, test_set_uri):
+# def main(baseline_dataset_uri, test_set_uri):
+def main(training_info):
     # ####
     # AWS especific
     AWS_DEFAULT_REGION = os.getenv('AWS_DEFAULT_REGION', 'eu-west-1')
@@ -109,18 +110,22 @@ def main(baseline_dataset_uri, test_set_uri):
     MODEL_PACKAGE_GROUP_NAME = os.getenv(
         'MODEL_PACKAGE_GROUP_NAME', 'stsPackageGroup')
     BASE_JOB_PREFIX = os.getenv('BASE_JOB_PREFIX', 'sts')
+    # outputs is a dict to save to json
+    outputs = dict()
 
     # get the last version aproved in the model package group
     model_package_arn = get_approved_package(
         MODEL_PACKAGE_GROUP_NAME, sm_client)
     _l.info(f"Latest approved model package: {model_package_arn}")
+    outputs['model'] = {'model_package_arn': model_package_arn}
     description = sm_client.describe_model_package(
         ModelPackageName=model_package_arn)
-    _l.info(f"Model package info: {pprint.pformat(description)}")
+    _l.debug(f"Model package info: {pprint.pformat(description)}")
 
     # register the model in sagemaker model registry
     ahora = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     model_name = f'sts-model-{ahora}'
+    outputs['model'].update(name=model_name)
     _l.info(f"Model name : {model_name}")
     primary_container = {
         'ModelPackageName': model_package_arn,
@@ -149,6 +154,7 @@ def main(baseline_dataset_uri, test_set_uri):
     # instances to use for the endpoint. It can also contain the
     # DataCaptureConfig
     endpoint_config_name = f'sts-model-EndpointConfig-{ahora}'
+    outputs['endpoint'] = {'config_name': endpoint_config_name}
     sm_session.create_endpoint_config(
         name=endpoint_config_name,
         model_name=model_name,
@@ -167,6 +173,7 @@ def main(baseline_dataset_uri, test_set_uri):
 
     # Create the endpoint using the EndPointConfig
     endpoint_name = f'sts-model-Endpoint-{ahora}'
+    outputs['endpoint'].update(name=endpoint_name)
     _l.info(f"Endpoint name: {endpoint_name}")
 
     sm_session.create_endpoint(
@@ -184,6 +191,7 @@ def main(baseline_dataset_uri, test_set_uri):
     mq_instance_volume_size_in_gb = 5
     mq_max_run_time_in_seconds = 1800
     monitor_schedule_name = f"mq-mon-sch-{BASE_JOB_PREFIX}"
+    outputs['endpoint'].update(monitor_schedule_name=monitor_schedule_name)
 
     # Create the Model Quality Monitor
     mq_monitor = ModelQualityMonitor(
@@ -213,7 +221,7 @@ def main(baseline_dataset_uri, test_set_uri):
     _l.info("Generate constraints for ModelQualityMonitor")
     mq_monitor.suggest_baseline(
         job_name=mq_baseline_job_name,
-        baseline_dataset=baseline_dataset_uri,
+        baseline_dataset=f"{training_info['baseline']['validate']}/baseline.csv",
         dataset_format=mq_baseline_dataset_format,
         output_s3_uri=mq_baseline_job_output_s3_path,
         problem_type=mq_problem_type,
@@ -262,7 +270,8 @@ def main(baseline_dataset_uri, test_set_uri):
     # Iterate over the y_test dataset
     synthetic_ground_truth_list = []
     # REVIEW: Supongo esta es la forma de seguir aqui
-    test_df = load_dataset(test_set_uri, 'test.csv')
+    test_df = load_dataset(
+        training_info.get('train')['test'], 'test.csv')
     y_test = test_df[[0]]
     y_test_rows = y_test.values.tolist()
     for index, y_test_row in enumerate(y_test_rows, start=1):
@@ -324,19 +333,28 @@ def main(baseline_dataset_uri, test_set_uri):
         _l.info(f'Waiting for {monitor_schedule_name}')
         time.sleep(3)
         mq_monitor_schedule_details = mq_monitor.describe_schedule()
-    _l.info(
+    _l.debug(
         f"Model Quality Monitor - schedule details: {pprint.pformat(mq_monitor_schedule_details)}")
     _l.info(
         f"Model Quality Monitor - schedule status: {mq_monitor_schedule_details['MonitoringScheduleStatus']}")
     # END: Model Quality Monitor
+
+    # save outputs to a file
+    with open('deploymodel_out.json', 'w') as f:
+        json.dump(outputs, f)
     # --
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--baseline-set-uri", type=str, required=True)
-    parser.add_argument("--test-set-uri", type=str, required=True)
+    parser.add_argument(
+        "--trainmodel-output", type=str, required=False, 
+        default='trainmodel_out.json',
+        help="JSON output from the train script"
+    )
 
     args, _ = parser.parse_known_args()
-    _l.info(f"Using baseline dataset {args.baseline_set_uri}")
-    main(args.baseline_set_uri, args.test_set_uri)
+    _l.info(f"Using training info {args.trainmodel_output}")
+    with open(args.trainmodel_output) as f:
+        data = json.load(f)
+    main(data)

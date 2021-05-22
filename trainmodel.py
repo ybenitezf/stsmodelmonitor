@@ -35,18 +35,18 @@ def extract_step_from_list(steps, step_to_extract) -> dict:
             return step
 
 
-def get_outputs(step: dict) -> List[str]:
+def get_outputs(step: dict) -> dict:
     """Returns the S3 uri outputs if present
 
     step: step definition in the pipeline
     """
-    response = []
+    response = {}
     try:
         outputs = step.get(
             'Arguments')['ProcessingOutputConfig']['Outputs']
         for o in outputs:
             s3_out = o.get('S3Output').get('S3Uri')
-            response.append(s3_out)
+            response[o.get('OutputName')] = s3_out
     except Exception as e:
         _l.debug(f"Error geting the outputs of {step.get('Name')}")
 
@@ -57,8 +57,8 @@ def main():
     # define some configurations from env
 
     # AWS especific
-    AWS_DEFAULT_REGION = os.getenv('AWS_DEFAULT_REGION', 'eu-west-1')
-    AWS_PROFILE = os.getenv('AWS_PROFILE', 'default')
+    AWS_DEFAULT_REGION = os.getenv('AWS_DEFAULT_REGION', None)
+    AWS_PROFILE = os.getenv('AWS_PROFILE', None)
     AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID', None)
     AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY', None)
     b3_session, sm_client, sm_runtime, sm_session = get_sm_session(
@@ -76,6 +76,12 @@ def main():
         'MODEL_PACKAGE_GROUP_NAME', 'stsPackageGroup')
     BASE_JOB_PREFIX = os.getenv('BASE_JOB_PREFIX', 'sts')
 
+    outputs = {
+        'pipeline': None,
+        'baseline': None,
+        'train': None
+    }
+
     try:
         # define the ml pipeline for training
         pipe = get_pipeline(
@@ -88,6 +94,7 @@ def main():
 
         # output debug information
         parsed = json.loads(pipe.definition())
+        outputs['pipeline'] = parsed
         _l.debug('ML Pipeline definition')
         _l.debug(json.dumps(parsed, indent=2, sort_keys=True))
 
@@ -111,16 +118,19 @@ def main():
             mse_step.get('Arguments').get('IfSteps'),
             'SetupMonitoringData'
         )
-        for o in get_outputs(mon_step):
-            _l.info(f"{mon_step.get('Name')} output: {o}/baseline.csv")
 
+        outputs['baseline'] = get_outputs(mon_step)
         # take de s3 uri of train, validate, and test datasets
         train_step_def = extract_step_from_list(
             parsed.get('Steps'), 'PreprocessSTSData')
-        _l.warning("Remember to add the file name at the end")
-        for o in get_outputs(train_step_def):
-            _l.info(f"PreprocessSTSData output: {o}")
+        outputs['train'] = get_outputs(train_step_def)
         # --
+
+        # whrite the pipeline def and the selected outputs to a json
+        # file
+        with open('trainmodel_out.json', 'w') as f:
+            json.dump(outputs, f)
+        # ---
     except Exception as e:
         _l.exception(f"Exception: {e}")
 
