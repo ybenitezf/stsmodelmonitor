@@ -10,7 +10,6 @@ Implements a get_pipeline(**kwargs) method.
 """
 import os
 
-import boto3
 import sagemaker
 import sagemaker.session
 
@@ -47,33 +46,10 @@ from sagemaker.workflow.step_collections import RegisterModel
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 
-def get_session(region, default_bucket):
-    """Gets the sagemaker session based on the region.
-
-    Args:
-        region: the aws region to start the session
-        default_bucket: the bucket to use for storing the artifacts
-
-    Returns:
-        `sagemaker.session.Session instance
-    """
-
-    boto_session = boto3.Session(region_name=region)
-
-    sagemaker_client = boto_session.client("sagemaker")
-    runtime_client = boto_session.client("sagemaker-runtime")
-    return sagemaker.session.Session(
-        boto_session=boto_session,
-        sagemaker_client=sagemaker_client,
-        sagemaker_runtime_client=runtime_client,
-        default_bucket=default_bucket,
-    )
-
-
 def get_pipeline(
     region,
+    sagemaker_session,
     role=None,
-    default_bucket=None,
     model_package_group_name="stsPackageGroup",
     pipeline_name="stsPipeline",
     base_job_prefix="sts",
@@ -88,7 +64,7 @@ def get_pipeline(
     Returns:
         an instance of a pipeline
     """
-    
+
     """
         Instance types allowed:
         
@@ -117,12 +93,12 @@ def get_pipeline(
         see
         https://aws.amazon.com/blogs/machine-learning/right-sizing-resources-and-avoiding-unnecessary-costs-in-amazon-sagemaker/
     """
-    sagemaker_session = get_session(region, default_bucket)
     if role is None:
         role = sagemaker.session.get_execution_role(sagemaker_session)
 
     # parameters for pipeline execution
-    processing_instance_count = ParameterInteger(name="ProcessingInstanceCount", default_value=1)
+    processing_instance_count = ParameterInteger(
+        name="ProcessingInstanceCount", default_value=1)
     processing_instance_type = ParameterString(
         name="ProcessingInstanceType", default_value="ml.m5.xlarge"
     )
@@ -134,15 +110,15 @@ def get_pipeline(
     model_approval_status = ParameterString(
         name="ModelApprovalStatus", default_value="Approved"
     )
-    
-    # preprocess 
-    
+
+    # preprocess
+
     # preprocess input data
     input_data = ParameterString(
         name="InputDataUrl",
         default_value=f"s3://sts-datwit-dataset/stsmsrpc.txt",
     )
-    
+
     # processing step for feature engineering
     sklearn_processor = SKLearnProcessor(
         framework_version="0.23-1",
@@ -152,14 +128,17 @@ def get_pipeline(
         sagemaker_session=sagemaker_session,
         role=role,
     )
-        
+
     step_preprocess = ProcessingStep(
         name="PreprocessSTSData",
         processor=sklearn_processor,
         outputs=[
-            ProcessingOutput(output_name="train", source="/opt/ml/processing/train"),
-            ProcessingOutput(output_name="validation", source="/opt/ml/processing/validation"),
-            ProcessingOutput(output_name="test", source="/opt/ml/processing/test"),
+            ProcessingOutput(output_name="train",
+                             source="/opt/ml/processing/train"),
+            ProcessingOutput(output_name="validation",
+                             source="/opt/ml/processing/validation"),
+            ProcessingOutput(output_name="test",
+                             source="/opt/ml/processing/test"),
         ],
         code=os.path.join(BASE_DIR, "preprocess.py"),
         job_arguments=["--input-data", input_data],
@@ -243,7 +222,8 @@ def get_pipeline(
             ),
         ],
         outputs=[
-            ProcessingOutput(output_name="evaluation", source="/opt/ml/processing/evaluation"),
+            ProcessingOutput(output_name="evaluation",
+                             source="/opt/ml/processing/evaluation"),
         ],
         code=os.path.join(BASE_DIR, "evaluate.py"),
         property_files=[evaluation_report],
@@ -276,7 +256,8 @@ def get_pipeline(
             ),
         ],
         outputs=[
-            ProcessingOutput(output_name="validate", source="/opt/ml/processing/validate"),
+            ProcessingOutput(output_name="validate",
+                             source="/opt/ml/processing/validate"),
         ],
         code=os.path.join(BASE_DIR, "baseline.py")
     )
@@ -291,7 +272,7 @@ def get_pipeline(
             content_type="application/json"
         )
     )
-    
+
     step_register = RegisterModel(
         name="RegisterSTSModel",
         estimator=xgb_train,
