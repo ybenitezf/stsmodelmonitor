@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 
 from sklearn.metrics import mean_squared_error
+import joblib
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -26,7 +27,8 @@ if __name__ == "__main__":
         tar.extractall(path=".")
 
     logger.debug("Loading sklearn model.")
-    model = pickle.load(open("model.pkl", "rb"))
+    # model = pickle.load(open("model.pkl", "rb"))
+    model = joblib.load("model.joblib")
 
     logger.debug("Reading test data.")
     test_path = "/opt/ml/processing/test/test.csv"

@@ -4,6 +4,7 @@ import pathlib
 import pickle
 import tarfile
 
+import joblib
 import numpy as np
 import pandas as pd
 
@@ -23,7 +24,8 @@ if __name__ == "__main__":
     # it may be more efficient to deploy the model and use the endpoint
     # to do this.
     logger.debug("Loading sklearn model.")
-    model = pickle.load(open("model.pkl", "rb"))
+    # model = pickle.load(open("model.pkl", "rb"))
+    model = joblib.load("model.joblib")
 
     # set the output dir
     output_dir = "/opt/ml/processing/validate"

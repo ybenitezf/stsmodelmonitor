@@ -11,22 +11,13 @@ https://docs.amazonaws.cn/en_us/sagemaker/latest/dg/model-registry.html
 """
 from botocore.exceptions import ClientError
 from dotenv import load_dotenv
-from sagemaker.model_monitor import ModelQualityMonitor, EndpointInput
-from sagemaker.model_monitor import CronExpressionGenerator
-from sagemaker.model_monitor.data_capture_config import _MODEL_MONITOR_S3_PATH
-from sagemaker.model_monitor.dataset_format import DatasetFormat
-from sts.utils import load_dataset, get_sm_session
-import random
+from sts.utils import get_sm_session
 import sagemaker
-import boto3
 import os
 import logging
 import pprint
 import datetime
-import argparse
-import tempfile
 import json
-import time
 
 
 _l = logging.getLogger()
@@ -91,7 +82,7 @@ def get_approved_package(model_package_group_name, sm_client):
 
 
 # def main(baseline_dataset_uri, test_set_uri):
-def main(training_info):
+def main():
     # ####
     # AWS especific
     AWS_DEFAULT_REGION = os.getenv('AWS_DEFAULT_REGION', 'eu-west-1')
@@ -142,12 +133,12 @@ def main(training_info):
     ######  with the model registered we can deploy the endpoint #####
 
     # Set some paths and vars needed
-    bucket = sm_session.default_bucket()
-    model_monitor_s3_path = 's3://{}/{}/model-monitor'.format(
-        bucket, BASE_JOB_PREFIX)
-    data_capture_output_s3_path = '{}/data-capture'.format(
-        model_monitor_s3_path)
-    _l.info(f"Capture path: {data_capture_output_s3_path}")
+    # bucket = sm_session.default_bucket()
+    # model_monitor_s3_path = 's3://{}/{}/model-monitor'.format(
+    #     bucket, BASE_JOB_PREFIX)
+    # data_capture_output_s3_path = '{}/data-capture'.format(
+    #     model_monitor_s3_path)
+    # _l.info(f"Capture path: {data_capture_output_s3_path}")
 
     # Create an endpoint configuration by calling create_endpoint_config.
     # The endpoint configuration specifies the number and type of Amazon EC2
@@ -160,15 +151,15 @@ def main(training_info):
         model_name=model_name,
         initial_instance_count=1,
         instance_type='ml.m5.xlarge',
-        data_capture_config_dict=sagemaker.model_monitor.DataCaptureConfig(
-            enable_capture=True,
-            sampling_percentage=100,  # TODO: reduce in production
-            capture_options=['REQUEST', 'RESPONSE'],
-            csv_content_types=['text/csv'],
-            json_content_types=None,
-            destination_s3_uri=data_capture_output_s3_path,
-            sagemaker_session=sm_session
-        )._to_request_dict()
+        # data_capture_config_dict=sagemaker.model_monitor.DataCaptureConfig(
+        #     enable_capture=True,
+        #     sampling_percentage=100,  # TODO: reduce in production
+        #     capture_options=['REQUEST', 'RESPONSE'],
+        #     csv_content_types=['text/csv'],
+        #     json_content_types=None,
+        #     destination_s3_uri=data_capture_output_s3_path,
+        #     sagemaker_session=sm_session
+        # )._to_request_dict()
     )
 
     # Create the endpoint using the EndPointConfig
@@ -186,157 +177,157 @@ def main(training_info):
     # ENDPOINT deploy done
 
     ################ Model Quality Monitor #####################
-    mq_instance_count = 1
-    mq_instance_type = 'ml.m5.xlarge'
-    mq_instance_volume_size_in_gb = 5
-    mq_max_run_time_in_seconds = 1800
-    monitor_schedule_name = f"mq-mon-sch-{BASE_JOB_PREFIX}"
-    outputs['endpoint'].update(monitor_schedule_name=monitor_schedule_name)
+    # mq_instance_count = 1
+    # mq_instance_type = 'ml.m5.xlarge'
+    # mq_instance_volume_size_in_gb = 5
+    # mq_max_run_time_in_seconds = 1800
+    # monitor_schedule_name = f"mq-mon-sch-{BASE_JOB_PREFIX}"
+    # outputs['endpoint'].update(monitor_schedule_name=monitor_schedule_name)
 
     # Create the Model Quality Monitor
-    mq_monitor = ModelQualityMonitor(
-        role=sagemaker.get_execution_role(sm_session),
-        instance_count=mq_instance_count,
-        instance_type=mq_instance_type,
-        volume_size_in_gb=mq_instance_volume_size_in_gb,
-        max_runtime_in_seconds=mq_max_run_time_in_seconds,
-        base_job_name=f"mq-{BASE_JOB_PREFIX}",
-        sagemaker_session=sm_session
-    )
+    # mq_monitor = ModelQualityMonitor(
+    #     role=sagemaker.get_execution_role(sm_session),
+    #     instance_count=mq_instance_count,
+    #     instance_type=mq_instance_type,
+    #     volume_size_in_gb=mq_instance_volume_size_in_gb,
+    #     max_runtime_in_seconds=mq_max_run_time_in_seconds,
+    #     base_job_name=f"mq-{BASE_JOB_PREFIX}",
+    #     sagemaker_session=sm_session
+    # )
 
     # baseline job for the model quality monitor
-    mq_baseline_job_name_prefix = 'mq-bsl-job-{}'.format(BASE_JOB_PREFIX)
-    mq_baseline_job_name = '{}-{:%Y%m%d%H%M}'.format(
-        mq_baseline_job_name_prefix, datetime.datetime.now())
+    # mq_baseline_job_name_prefix = 'mq-bsl-job-{}'.format(BASE_JOB_PREFIX)
+    # mq_baseline_job_name = '{}-{:%Y%m%d%H%M}'.format(
+    #     mq_baseline_job_name_prefix, datetime.datetime.now())
     # REVIEW: Mirar si realmente este es el formato en que esta el el dataset
-    mq_baseline_dataset_format = DatasetFormat.csv(
-        header=True, output_columns_position='START')
-    mq_problem_type = 'MulticlassClassification'
-    mq_inference_attribute = 'prediction'
-    mq_ground_truth_attribute = 'label'
-    mq_baseline_job_output_s3_path = "s3://{}/{}/model-quality/baseline/".format(
-        bucket, BASE_JOB_PREFIX)
+    # mq_baseline_dataset_format = DatasetFormat.csv(
+    #     header=True, output_columns_position='START')
+    # mq_problem_type = 'MulticlassClassification'
+    # mq_inference_attribute = 'prediction'
+    # mq_ground_truth_attribute = 'label'
+    # mq_baseline_job_output_s3_path = "s3://{}/{}/model-quality/baseline/".format(
+    #     bucket, BASE_JOB_PREFIX)
 
     # Create the baseline job and generate the constraints
-    _l.info("Generate constraints for ModelQualityMonitor")
-    mq_monitor.suggest_baseline(
-        job_name=mq_baseline_job_name,
-        baseline_dataset=f"{training_info['baseline']['validate']}/baseline.csv",
-        dataset_format=mq_baseline_dataset_format,
-        output_s3_uri=mq_baseline_job_output_s3_path,
-        problem_type=mq_problem_type,
-        inference_attribute=mq_inference_attribute,
-        ground_truth_attribute=mq_ground_truth_attribute,
-        wait=True,
-        logs=False
-    )
+    # _l.info("Generate constraints for ModelQualityMonitor")
+    # mq_monitor.suggest_baseline(
+    #     job_name=mq_baseline_job_name,
+    #     baseline_dataset=f"{training_info['baseline']['validate']}/baseline.csv",
+    #     dataset_format=mq_baseline_dataset_format,
+    #     output_s3_uri=mq_baseline_job_output_s3_path,
+    #     problem_type=mq_problem_type,
+    #     inference_attribute=mq_inference_attribute,
+    #     ground_truth_attribute=mq_ground_truth_attribute,
+    #     wait=True,
+    #     logs=False
+    # )
 
-    mq_baseline_job = mq_monitor.latest_baselining_job
+    # mq_baseline_job = mq_monitor.latest_baselining_job
 
     # Print the statistics
-    _l.debug('Model Quality statistics:')
-    _l.debug(
-        mq_baseline_job.baseline_statistics(
-        ).body_dict['multiclass_classification_metrics'])
+    # _l.debug('Model Quality statistics:')
+    # _l.debug(
+    #     mq_baseline_job.baseline_statistics(
+    #     ).body_dict['multiclass_classification_metrics'])
 
     # Print the constraints
-    _l.debug('Model Quality constraints:')
-    _l.debug(
-        mq_baseline_job.suggested_constraints(
-        ).body_dict['multiclass_classification_constraints'])
+    # _l.debug('Model Quality constraints:')
+    # _l.debug(
+    #     mq_baseline_job.suggested_constraints(
+    #     ).body_dict['multiclass_classification_constraints'])
 
     # Ingest ground truth labels and merge them with predictions
 
-    inference_id_prefix = 'sts_'
+    # inference_id_prefix = 'sts_'
     # REVIEW:
     # Randomly set y column's value as 1,000,000 for 20% of the time.
     # This will result in violations on Model Quality that you will
     # observe when monitoring completes.
 
-    def generate_synthetic_ground_truth(inference_id_suffix, y_test_value):
-        random.seed(inference_id_suffix)
-        rand = random.random()
-        return {
-            'groundTruthData': {
-                'data': '1000000' if rand < 0.2 else y_test_value,
-                'encoding': 'CSV'
-            },
-            'eventMetadata': {
-                'eventId': '{}{}'.format(inference_id_prefix, inference_id_suffix)
-            },
-            'eventVersion': '0'
-        }
+    # def generate_synthetic_ground_truth(inference_id_suffix, y_test_value):
+    #     random.seed(inference_id_suffix)
+    #     rand = random.random()
+    #     return {
+    #         'groundTruthData': {
+    #             'data': '1000000' if rand < 0.2 else y_test_value,
+    #             'encoding': 'CSV'
+    #         },
+    #         'eventMetadata': {
+    #             'eventId': '{}{}'.format(inference_id_prefix, inference_id_suffix)
+    #         },
+    #         'eventVersion': '0'
+    #     }
 
     # Iterate over the y_test dataset
-    synthetic_ground_truth_list = []
+    # synthetic_ground_truth_list = []
     # REVIEW: Supongo esta es la forma de seguir aqui
-    test_df = load_dataset(
-        training_info.get('train')['test'], 'test.csv')
-    y_test = test_df[[0]]
-    y_test_rows = y_test.values.tolist()
-    for index, y_test_row in enumerate(y_test_rows, start=1):
-        synthetic_ground_truth_list.append(
-            json.dumps(
-                generate_synthetic_ground_truth(index, str(y_test_row[0]))))
+    # test_df = load_dataset(
+    #     training_info.get('train')['test'], 'test.csv')
+    # y_test = test_df[[0]]
+    # y_test_rows = y_test.values.tolist()
+    # for index, y_test_row in enumerate(y_test_rows, start=1):
+    #     synthetic_ground_truth_list.append(
+    #         json.dumps(
+    #             generate_synthetic_ground_truth(index, str(y_test_row[0]))))
 
-    ground_truth_dir_s3_prefix = '{}/data/ground-truth'.format(
-        BASE_JOB_PREFIX)
-    synthetic_ground_truth_s3_path_suffix = datetime.datetime.now().strftime(
-        '/%Y/%m/%d/%H')
-    with tempfile.TemporaryDirectory() as ground_truth_dir:
-        # Write the synthetic ground truth file to the local directory
-        synthetic_ground_truth_file_name = 'synthetic_ground_truth.jsonl'
-        synthetic_ground_truth_file_path = os.path.join(
-            ground_truth_dir, synthetic_ground_truth_file_name)
-        with open(synthetic_ground_truth_file_path, 'wt') as synthetic_ground_truth_file:
-            synthetic_ground_truth_file.write(
-                '\n'.join(synthetic_ground_truth_list))
+    # ground_truth_dir_s3_prefix = '{}/data/ground-truth'.format(
+    #     BASE_JOB_PREFIX)
+    # synthetic_ground_truth_s3_path_suffix = datetime.datetime.now().strftime(
+    #     '/%Y/%m/%d/%H')
+    # with tempfile.TemporaryDirectory() as ground_truth_dir:
+    #     # Write the synthetic ground truth file to the local directory
+    #     synthetic_ground_truth_file_name = 'synthetic_ground_truth.jsonl'
+    #     synthetic_ground_truth_file_path = os.path.join(
+    #         ground_truth_dir, synthetic_ground_truth_file_name)
+    #     with open(synthetic_ground_truth_file_path, 'wt') as synthetic_ground_truth_file:
+    #         synthetic_ground_truth_file.write(
+    #             '\n'.join(synthetic_ground_truth_list))
 
-        # Upload the synthetic ground truth file to S3
-        sm_session.upload_data(
-            path=synthetic_ground_truth_file_path,
-            key_prefix="{}{}".format(
-                ground_truth_dir_s3_prefix,
-                synthetic_ground_truth_s3_path_suffix
-            ),
-            bucket=bucket)
+        # # Upload the synthetic ground truth file to S3
+        # sm_session.upload_data(
+        #     path=synthetic_ground_truth_file_path,
+        #     key_prefix="{}{}".format(
+        #         ground_truth_dir_s3_prefix,
+        #         synthetic_ground_truth_s3_path_suffix
+        #     ),
+    #     #     bucket=bucket)
 
-    synthetic_ground_truth_s3_path_prefix = 's3://{}/{}'.format(
-        bucket, ground_truth_dir_s3_prefix)
+    # synthetic_ground_truth_s3_path_prefix = 's3://{}/{}'.format(
+    #     bucket, ground_truth_dir_s3_prefix)
 
     # Model Quality schedule
-    mq_monitor_schedule_endpoint_input = EndpointInput(
-        endpoint_name=endpoint_name,
-        destination='/opt/ml/processing/mq_monitor/input_data',
-        inference_attribute='0',
-        start_time_offset='-PT1H',
-        end_time_offset='-PT0H')
+    # mq_monitor_schedule_endpoint_input = EndpointInput(
+    #     endpoint_name=endpoint_name,
+    #     destination='/opt/ml/processing/mq_monitor/input_data',
+    #     inference_attribute='0',
+    #     start_time_offset='-PT1H',
+    #     end_time_offset='-PT0H')
 
-    mq_mon_schedule_output_s3_path = '{}/model-quality/monitoring'.format(
-        model_monitor_s3_path
-    )
-    mq_monitor.create_monitoring_schedule(
-        monitor_schedule_name=monitor_schedule_name,
-        endpoint_input=mq_monitor_schedule_endpoint_input,
-        ground_truth_input=synthetic_ground_truth_s3_path_prefix,
-        problem_type=mq_problem_type,
-        output_s3_uri=mq_mon_schedule_output_s3_path,
-        constraints=mq_monitor.suggested_constraints(),
-        schedule_cron_expression=CronExpressionGenerator.hourly(),
-        enable_cloudwatch_metrics=True
-    )
+    # mq_mon_schedule_output_s3_path = '{}/model-quality/monitoring'.format(
+    #     model_monitor_s3_path
+    # )
+    # mq_monitor.create_monitoring_schedule(
+    #     monitor_schedule_name=monitor_schedule_name,
+    #     endpoint_input=mq_monitor_schedule_endpoint_input,
+    #     ground_truth_input=synthetic_ground_truth_s3_path_prefix,
+    #     problem_type=mq_problem_type,
+    #     output_s3_uri=mq_mon_schedule_output_s3_path,
+    #     constraints=mq_monitor.suggested_constraints(),
+    #     schedule_cron_expression=CronExpressionGenerator.hourly(),
+    #     enable_cloudwatch_metrics=True
+    # )
 
     # Model Quality details
     # Describe and print status
-    mq_monitor_schedule_details = mq_monitor.describe_schedule()
-    while mq_monitor_schedule_details['MonitoringScheduleStatus'] == 'Pending':
-        _l.info(f'Waiting for {monitor_schedule_name}')
-        time.sleep(3)
-        mq_monitor_schedule_details = mq_monitor.describe_schedule()
-    _l.debug(
-        f"Model Quality Monitor - schedule details: {pprint.pformat(mq_monitor_schedule_details)}")
-    _l.info(
-        f"Model Quality Monitor - schedule status: {mq_monitor_schedule_details['MonitoringScheduleStatus']}")
+    # mq_monitor_schedule_details = mq_monitor.describe_schedule()
+    # while mq_monitor_schedule_details['MonitoringScheduleStatus'] == 'Pending':
+    #     _l.info(f'Waiting for {monitor_schedule_name}')
+    #     time.sleep(3)
+    #     mq_monitor_schedule_details = mq_monitor.describe_schedule()
+    # _l.debug(
+    #     f"Model Quality Monitor - schedule details: {pprint.pformat(mq_monitor_schedule_details)}")
+    # _l.info(
+    #     f"Model Quality Monitor - schedule status: {mq_monitor_schedule_details['MonitoringScheduleStatus']}")
     # END: Model Quality Monitor
 
     # save outputs to a file
@@ -346,15 +337,16 @@ def main(training_info):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--trainmodel-output", type=str, required=False, 
-        default='trainmodel_out.json',
-        help="JSON output from the train script"
-    )
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument(
+    #     "--trainmodel-output", type=str, required=False, 
+    #     default='trainmodel_out.json',
+    #     help="JSON output from the train script"
+    # )
 
-    args, _ = parser.parse_known_args()
-    _l.info(f"Using training info {args.trainmodel_output}")
-    with open(args.trainmodel_output) as f:
-        data = json.load(f)
-    main(data)
+    # args, _ = parser.parse_known_args()
+    # _l.info(f"Using training info {args.trainmodel_output}")
+    # with open(args.trainmodel_output) as f:
+    #     data = json.load(f)
+    # main(data)
+    main()
