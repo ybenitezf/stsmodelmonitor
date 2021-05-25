@@ -14,6 +14,7 @@ from subprocess import run
 
 from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.linear_model import LogisticRegression
+import joblib
 
 warnings.filterwarnings(action='ignore')
 
@@ -51,8 +52,8 @@ if __name__ == "__main__":
 
     logger.info("Saving trained model.")
 
-    filename = f"model"
-    model_path = os.environ.get('SM_MODEL_DIR')+"/"
-    pickle.dump(logreg, open(model_path + filename + '.pkl', 'wb'))
+    # https://sagemaker.readthedocs.io/en/stable/frameworks/sklearn/using_sklearn.html#save-the-model
+    filename = os.path.join(os.environ.get('SM_MODEL_DIR'), "model.joblib")
+    joblib.dump(logreg, filename)
 
     logger.info("End modeling.")
