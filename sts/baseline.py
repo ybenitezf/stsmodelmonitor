@@ -12,7 +12,7 @@ logger.setLevel(logging.INFO)
 logger.addHandler(logging.StreamHandler())
 
 if __name__ == "__main__":
-    logger.info("Setup model quality monitoring")
+    logger.info("Setup model quality baline dataset")
 
     # Load the trained model
     model_path = "/opt/ml/processing/model/model.tar.gz"
@@ -34,7 +34,7 @@ if __name__ == "__main__":
     logger.info(validate_set_df.describe())
 
     # labels this is of type pandas.core.series.Series
-    y_test = validate_set_df.iloc[:, 0].to_numpy()
+    y_test = validate_set_df.iloc[:, 0]
     validate_set_df.drop(validate_set_df.columns[0], axis=1, inplace=True)
     topredict = validate_set_df.values
 
