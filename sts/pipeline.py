@@ -10,6 +10,7 @@ Implements a get_pipeline(**kwargs) method.
 """
 import os
 
+import boto3
 import sagemaker
 import sagemaker.session
 
@@ -41,15 +42,39 @@ from sagemaker.workflow.steps import (
     TrainingStep,
 )
 from sagemaker.workflow.step_collections import RegisterModel
-
+from sagemaker.sklearn import SKLearn
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
+
+
+def get_session(region, default_bucket):
+    """Gets the sagemaker session based on the region.
+
+    Args:
+        region: the aws region to start the session
+        default_bucket: the bucket to use for storing the artifacts
+
+    Returns:
+        `sagemaker.session.Session instance
+    """
+
+    boto_session = boto3.Session(region_name=region)
+
+    sagemaker_client = boto_session.client("sagemaker")
+    runtime_client = boto_session.client("sagemaker-runtime")
+    return sagemaker.session.Session(
+        boto_session=boto_session,
+        sagemaker_client=sagemaker_client,
+        sagemaker_runtime_client=runtime_client,
+        default_bucket=default_bucket,
+    )
 
 
 def get_pipeline(
     region,
     sagemaker_session,
     role=None,
+    default_bucket=None,
     model_package_group_name="stsPackageGroup",
     pipeline_name="stsPipeline",
     base_job_prefix="sts",
@@ -77,22 +102,10 @@ def get_pipeline(
         ml.m4.2xlarge, ml.m5.2xlarge, ml.p2.8xlarge, ml.r5.8xlarge, ml.r5.xlarge, 
         ml.r5.large, ml.p3.8xlarge, ml.m4.4xlarge
 
-        REVIEW: For taining it need to be one of:  
-
-        ml.p2.xlarge, ml.m5.4xlarge, ml.m4.16xlarge, ml.p4d.24xlarge, 
-        ml.c5n.xlarge, ml.p3.16xlarge, ml.m5.large, ml.p2.16xlarge, 
-        ml.c4.2xlarge, ml.c5.2xlarge, ml.c4.4xlarge, ml.c5.4xlarge, 
-        ml.c5n.18xlarge, ml.g4dn.xlarge, ml.g4dn.12xlarge, ml.c4.8xlarge, 
-        ml.g4dn.2xlarge, ml.c5.9xlarge, ml.g4dn.4xlarge, ml.c5.xlarge, 
-        ml.g4dn.16xlarge, ml.c4.xlarge, ml.g4dn.8xlarge, ml.c5n.2xlarge, 
-        ml.c5n.4xlarge, ml.c5.18xlarge, ml.p3dn.24xlarge, ml.p3.2xlarge, 
-        ml.m5.xlarge, ml.m4.10xlarge, ml.c5n.9xlarge, ml.m5.12xlarge, 
-        ml.m4.xlarge, ml.m5.24xlarge, ml.m4.2xlarge, ml.p2.8xlarge, 
-        ml.m5.2xlarge, ml.p3.8xlarge, ml.m4.4xlarge
-
         see
         https://aws.amazon.com/blogs/machine-learning/right-sizing-resources-and-avoiding-unnecessary-costs-in-amazon-sagemaker/
     """
+    sagemaker_session = get_session(region, default_bucket)
     if role is None:
         role = sagemaker.session.get_execution_role(sagemaker_session)
 
@@ -111,7 +124,7 @@ def get_pipeline(
         name="ModelApprovalStatus", default_value="Approved"
     )
 
-    # preprocess
+    # preprocess 
 
     # preprocess input data
     input_data = ParameterString(
@@ -134,11 +147,11 @@ def get_pipeline(
         processor=sklearn_processor,
         outputs=[
             ProcessingOutput(output_name="train",
-                             source="/opt/ml/processing/train"),
+                            source="/opt/ml/processing/train"),
             ProcessingOutput(output_name="validation",
-                             source="/opt/ml/processing/validation"),
+                            source="/opt/ml/processing/validation"),
             ProcessingOutput(output_name="test",
-                             source="/opt/ml/processing/test"),
+                            source="/opt/ml/processing/test"),
         ],
         code=os.path.join(BASE_DIR, "preprocess.py"),
         job_arguments=["--input-data", input_data],
@@ -147,34 +160,28 @@ def get_pipeline(
     # training step for generating model artifacts
     model_path = f"s3://{sagemaker_session.default_bucket()}/{base_job_prefix}/stsTrain"
     image_uri = sagemaker.image_uris.retrieve(
-        framework="xgboost",
+        framework="sklearn",
         region=region,
-        version="1.0-1",
+        version="0.23-1",
         py_version="py3",
         instance_type=training_instance_type,
     )
-    xgb_train = Estimator(
-        image_uri=image_uri,
+
+    sklearn_estimator = SKLearn(
+        entry_point='training.py',
+        source_dir=BASE_DIR,
         instance_type=training_instance_type,
         instance_count=1,
         output_path=model_path,
+        framework_version="0.23-1",
+        py_version="py3",
         base_job_name=f"{base_job_prefix}/sts-train",
         sagemaker_session=sagemaker_session,
-        role=role,
-    )
-    xgb_train.set_hyperparameters(
-        objective="reg:linear",
-        num_round=50,
-        max_depth=5,
-        eta=0.2,
-        gamma=4,
-        min_child_weight=6,
-        subsample=0.7,
-        silent=0,
-    )
+        role=role,)
+
     step_train = TrainingStep(
         name="TrainSTSModel",
-        estimator=xgb_train,
+        estimator=sklearn_estimator,
         inputs={
             "train": TrainingInput(
                 s3_data=step_preprocess.properties.ProcessingOutputConfig.Outputs[
@@ -223,13 +230,13 @@ def get_pipeline(
         ],
         outputs=[
             ProcessingOutput(output_name="evaluation",
-                             source="/opt/ml/processing/evaluation"),
+                            source="/opt/ml/processing/evaluation"),
         ],
         code=os.path.join(BASE_DIR, "evaluate.py"),
         property_files=[evaluation_report],
     )
 
-    # setup model quality monitoring baseline data
+        # setup model quality monitoring baseline data
     script_process_baseline_data = ScriptProcessor(
         image_uri=image_uri,
         command=["python3"],
@@ -275,7 +282,7 @@ def get_pipeline(
 
     step_register = RegisterModel(
         name="RegisterSTSModel",
-        estimator=xgb_train,
+        estimator=sklearn_estimator,
         model_data=step_train.properties.ModelArtifacts.S3ModelArtifacts,
         content_types=["text/csv"],
         response_types=["text/csv"],
