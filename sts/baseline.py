@@ -1,10 +1,11 @@
+"Baseline script for model quality monitoring"""
 import logging
-import numpy as np
-import pandas as pd
 import pathlib
 import pickle
 import tarfile
-import xgboost
+
+import numpy as np
+import pandas as pd
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -18,11 +19,11 @@ if __name__ == "__main__":
     with tarfile.open(model_path) as tar:
         tar.extractall(path=".")
 
-    logger.info("Loading xgboost model.")
     # In this case the we are using directly the model
     # it may be more efficient to deploy the model and use the endpoint
     # to do this.
-    model = pickle.load(open("xgboost-model", "rb"))
+    logger.debug("Loading sklearn model.")
+    model = pickle.load(open("model.pkl", "rb"))
 
     # set the output dir
     output_dir = "/opt/ml/processing/validate"
@@ -31,12 +32,14 @@ if __name__ == "__main__":
     data_path = "/opt/ml/processing/validation/validation.csv"
     validate_set_df = pd.read_csv(data_path, header=None)
     logger.info(validate_set_df.describe())
+
     # labels this is of type pandas.core.series.Series
-    y_test = validate_set_df.iloc[:, 0]
+    y_test = validate_set_df.iloc[:, 0].to_numpy()
     validate_set_df.drop(validate_set_df.columns[0], axis=1, inplace=True)
-    topredict = xgboost.DMatrix(validate_set_df.values)
+    topredict = validate_set_df.values
 
     # predictions is numpy.ndarray
+    logger.info("Performing predictions against test data.")
     predictions = model.predict(topredict)
     df_predictions = pd.DataFrame(predictions)
 
@@ -52,4 +55,3 @@ if __name__ == "__main__":
 
     logger.info(
         f"Model quality baseline dataset in {output_dir}/baseline.csv")
-
