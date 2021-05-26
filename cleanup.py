@@ -51,19 +51,21 @@ def main(resources):
     )
 
     # remove resourses created by deploymodel.py
-    print("Removing Model Quality Schedule")
-    delete_schedule(
-        resources['endpoint']['monitor_schedule_name'],
-        sm_client)
+    if 'monitor_schedule_name' in resources['endpoint']:
+        print("Removing Model Quality Schedule")
+        delete_schedule(
+            resources['endpoint']['monitor_schedule_name'],
+            sm_client)
     print("Removing endpoint config")
     sm_client.delete_endpoint_config(
         EndpointConfigName=resources['endpoint']['config_name'])
     print("Removing endpoint")
     sm_client.delete_endpoint(
         EndpointName=resources['endpoint']['name'])
-    print("Removing model")
-    sm_client.delete_model(
-        ModelName=resources['model']['name'])
+    if 'model' in resources:
+        print("Removing model")
+        sm_client.delete_model(
+            ModelName=resources['model']['name'])
 
     print("None of the S3 resources were deleted !!!")
     
