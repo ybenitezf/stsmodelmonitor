@@ -16,7 +16,6 @@ from sts.utils import get_sm_session
 import sagemaker
 import os
 import logging
-import pprint
 import datetime
 import json
 
@@ -123,21 +122,23 @@ def main():
     _l.info(f"Model data uri: {model_uri}")
 
     sk_model = SKLearnModel(
-        model_uri,
-        ROLE_ARN,
-        'model_loader.py',
+        model_uri,  # s3 uri for the model.tar.gz
+        ROLE_ARN,   # sagemaker role to be used
+        'model_loader.py',  # script to load the model
         framework_version='0.23-1'
     )
 
     predictor = sk_model.deploy(
-        instance_type="ml.c4.xlarge", 
-        initial_instance_count=1)
+        instance_type="ml.m5.xlarge", 
+        initial_instance_count=1
+    )
 
     _l.info(f"Endpoint name: {predictor.endpoint_name}")
     outputs['endpoint'] = {
         'name': predictor.endpoint_name,
         'config_name': predictor.endpoint_name # is the same as the endpoint
     }
+    outputs['model_info'].update({"name": sk_model.name})
     # outputs['model'] = {'model_package_arn': model_package_arn}
     # description = sm_client.describe_model_package(
     #     ModelPackageName=model_package_arn)
