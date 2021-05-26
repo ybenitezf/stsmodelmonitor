@@ -75,7 +75,7 @@ def get_pipeline(
     sagemaker_session,
     role=None,
     default_bucket=None,
-    model_package_group_name="stsPackageGroup",
+    model_package_group_name="sts-sklearn-grp",
     pipeline_name="stsPipeline",
     base_job_prefix="sts",
 ) -> Pipeline:

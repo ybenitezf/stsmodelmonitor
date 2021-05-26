@@ -73,7 +73,7 @@ def main():
     # MLOps especific
     PIPELINE_NAME = os.getenv('PIPELINE_NAME', 'stsPipeline')
     MODEL_PACKAGE_GROUP_NAME = os.getenv(
-        'MODEL_PACKAGE_GROUP_NAME', 'stsPackageGroup')
+        'MODEL_PACKAGE_GROUP_NAME', 'sts-sklearn-grp')
     BASE_JOB_PREFIX = os.getenv('BASE_JOB_PREFIX', 'sts')
 
     outputs = {
