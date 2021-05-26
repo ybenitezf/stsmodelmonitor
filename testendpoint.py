@@ -1,9 +1,11 @@
 from sts.utils import load_dataset, get_sm_session
+from sagemaker.sklearn.model import SKLearnPredictor
 from dotenv import load_dotenv
 import os
 import argparse
 import json
 import progressbar
+import time
 
 
 load_dotenv()
@@ -25,6 +27,12 @@ def main(deploy_data, train_data):
         aws_secret_access_key=AWS_SECRET_ACCESS_KEY
     )
 
+    # Load a predictor using the endpoint name
+    predictor = SKLearnPredictor(
+        deploy_data['endpoint']['name'],
+        sagemaker_session=sm_session
+    )
+
     # read test data
     test_data = load_dataset(
         train_data['train']['test'], 'test.csv', sagemaker_session=sm_session)
@@ -37,28 +45,28 @@ def main(deploy_data, train_data):
 
     # Iterate over the test data and call the endpoint for each row, 
     # stop for 2 seconds for rows divisible by 3, just to make time
-    x_test_rows = test_data.values.tolist()
+    x_test_rows = test_data.values
     print(
         f"Sending trafic to the endpoint: {deploy_data['endpoint']['name']}")
     with progressbar.ProgressBar(max_value=len(x_test_rows)) as bar:
         for index, x_test_row in enumerate(x_test_rows, start=1):
-            x_test_row_string = ','.join(map(str, x_test_row))
             # Auto-generate an inference-id to track the request/response 
             # in the captured data
             inference_id = '{}{}'.format(inference_id_prefix, index)
 
-            response = sm_runtime.invoke_endpoint(
-                EndpointName=deploy_data['endpoint']['name'],
-                ContentType='text/csv',
-                Body=x_test_row_string,
-                InferenceId=inference_id
+            result = predictor.predict(
+                #  Expected 2D array, Reshape your data either using 
+                # array.reshape(-1, 1) if your data has a single feature 
+                # or array.reshape(1, -1) if it contains a single sample.
+                x_test_row.reshape(1,-1),
+                inference_id=inference_id
             )
-            result = json.loads(response['Body'].read().decode())
+
             outputs['inferences'].append(
                 {
                     inference_id: {
-                        'input': x_test_row,
-                        'result': result
+                        'input': x_test_row.tolist(),
+                        'result': result.tolist()
                     }
                 }
             )

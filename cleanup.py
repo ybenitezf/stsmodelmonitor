@@ -62,10 +62,10 @@ def main(resources):
     print("Removing endpoint")
     sm_client.delete_endpoint(
         EndpointName=resources['endpoint']['name'])
-    if 'model' in resources:
-        print("Removing model")
+    if 'model_info' in resources:
+        print("Removing model from registry")
         sm_client.delete_model(
-            ModelName=resources['model']['name'])
+            ModelName=resources['model_info']['name'])
 
     print("None of the S3 resources were deleted !!!")
     
