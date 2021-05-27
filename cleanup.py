@@ -2,10 +2,10 @@
 
 Assumes the shelude is called "mq-mon-sch-sts"
 """
+from sagemaker.sklearn.model import SKLearnPredictor
 from dotenv import load_dotenv
 from sts.utils import get_sm_session
 import os
-import pprint
 import json
 import argparse
 import botocore
@@ -43,29 +43,29 @@ def main(resources):
     AWS_PROFILE = os.getenv('AWS_PROFILE', 'default')
     AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID', None)
     AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY', None)
-    _, sm_client, _, _ = get_sm_session(
+    b3_session, sm_client, sm_runtime, sm_session = get_sm_session(
         region=AWS_DEFAULT_REGION,
         profile_name=AWS_PROFILE,
         aws_access_key_id=AWS_ACCESS_KEY_ID,
         aws_secret_access_key=AWS_SECRET_ACCESS_KEY
     )
 
-    # remove resourses created by deploymodel.py
-    if 'monitor_schedule_name' in resources['endpoint']:
+    # remove resourses created by deploymodel.py and setup_mq.py
+    if 'schedule_name' in resources['monitor']:
         print("Removing Model Quality Schedule")
         delete_schedule(
-            resources['endpoint']['monitor_schedule_name'],
+            resources['monitor']['schedule_name'],
             sm_client)
-    print("Removing endpoint config")
-    sm_client.delete_endpoint_config(
-        EndpointConfigName=resources['endpoint']['config_name'])
-    print("Removing endpoint")
-    sm_client.delete_endpoint(
-        EndpointName=resources['endpoint']['name'])
-    if 'model_info' in resources:
+
+    if 'endpoint' in resources:
+        predictor = SKLearnPredictor(
+            resources['endpoint']['name'],
+            sagemaker_session=sm_session
+        )
         print("Removing model from registry")
-        sm_client.delete_model(
-            ModelName=resources['model_info']['name'])
+        predictor.delete_model()
+        print("Removing endpoint")
+        predictor.delete_endpoint(delete_endpoint_config=True)
 
     print("None of the S3 resources were deleted !!!")
     
