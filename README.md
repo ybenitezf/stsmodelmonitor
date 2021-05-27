@@ -30,7 +30,8 @@ BASE_JOB_PREFIX=DDDDDDDDDDDDDDDDDDDDDDDDD
   - `preprocess.py`: a processing script for the sts dataset (`s3://sts-datwit-dataset/stsmsrpc.txt`)
   - `utils.py`: define some usefull functions
 - `trainmodel.py`: sends to AWS SageMaker the ML pipeline definition and wait for the training to be done. It will output some information to the file `trainmodel_out.json`
-- `deploymodel.py`: deploys the latest version of the model if any and setup model quality monitor. It will output some information to the file `deploymodel_out.json`.
+- `deploymodel.py`: deploys the latest version of the model if any. It will output some information to the file `deploymodel_out.json`.
+- `setupmq.py`: example setup of model quality monitor for the endpoint deployed in `deploymode.py`, this require the files `trainmodel_out.json` and `deploymodel_out.json`. It will add information to `deploymodel_out.json`.
 - `cleanup.py`: will remove the schedule model quality monitor, endpoint config, model endpoint and the model from the sagemaker registries.
 - `testendpoint.py`: will call the model endpoint passing to it the `test.csv` dataset, it will ouput the inferences to the file `testendpoint_out.json`
 
