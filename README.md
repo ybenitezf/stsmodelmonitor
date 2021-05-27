@@ -25,7 +25,7 @@ BASE_JOB_PREFIX=DDDDDDDDDDDDDDDDDDDDDDDDD
 - `example_data`: some examples of pipeline definitions, as a form of documentation
 - `sts`: main py package
   - `baseline.py`: a processing script that generates a baseline dataset for the model quality monitor.
-  - `evaluate.py`: ...
+  - `evaluate.py`: using test.csv dataset evaluates the model metrics for Model registration on AWS
   - `pipeline.py`: defines the ML  pipeline for sagemaker
   - `preprocess.py`: a processing script for the sts dataset (`s3://sts-datwit-dataset/stsmsrpc.txt`)
   - `utils.py`: define some usefull functions
