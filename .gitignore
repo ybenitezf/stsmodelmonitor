@@ -133,3 +133,5 @@ dmypy.json
 trainmodel_out.json
 deploymodel_out.json
 testendpoint_out.json
+
+testdata/
