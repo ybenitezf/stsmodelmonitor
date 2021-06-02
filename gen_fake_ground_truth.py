@@ -1,5 +1,5 @@
 from sts.utils import load_dataset, get_sm_session
-from sagemaker.sklearn.model import SKLearnPredictor
+from sagemaker_containers.beta.framework import content_types, encoders
 from sagemaker.s3 import S3Downloader, S3Uploader
 from dotenv import load_dotenv
 from io import BytesIO
@@ -15,23 +15,21 @@ import random
 load_dotenv()
 
 
-def decode_capture(data: str) -> np.array:
-    bytes_data = base64.decodebytes(data.encode('utf-8'))
-    stream = BytesIO(bytes_data)
-    return np.load(stream, allow_pickle=True)
-
-
 def ground_truth_with_id(
-        inference_id, label, original_labels, inference_id_prefix):
+        inference_id, predicted, labels, inference_id_prefix):
     # comment the next line to use the actual label from the inference
     # i am using random here to invalidate some of the values for
     # the quality monitor
-    # data_label = '1.0' if label == original_labels[inference_id-1] else '0.0'
-    data_label = random.choice(['0.0', '1.0'])
+    data_label = random.choice(['1', '0'])
+
+    # check if original label and predicted are the same and label,
+    # uncomment to use test dataset
+    # data_label = '1.0' if label == labels[inference_id-1] else '0.0'
 
     return {
         "groundTruthData": {
-            # check if original label and predicted are the same and label
+            # encode the inference with the same contentType
+            # "data": encoders.encode(data_label, content_types.CSV),
             "data": data_label,
             "encoding": "CSV",
         }, 
@@ -95,10 +93,9 @@ def main(deploy_data, train_data, capture_prefix):
         req_id = int(inference_id[len(inference_id_prefix):])
         
         # Extract result given by the model
-        Y_pred_encoded = obj["captureData"]["endpointOutput"]["data"]
-        Y_pred_value = decode_capture(Y_pred_encoded).tolist()[0]
-        
-        captured_predictions[req_id] = Y_pred_value
+        Y_pred_value = encoders.decode(
+            obj["captureData"]["endpointOutput"]["data"], "text/csv")
+        captured_predictions[req_id] = Y_pred_value  # np.array
 
 
     # save and upload te files

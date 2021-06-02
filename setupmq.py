@@ -1,4 +1,4 @@
-"""Run to stop the schedule model quality monitor
+"""Setup the schedule model quality monitor
 
 Assumes the shelude is called "mq-mon-sch-sts"
 """
@@ -77,10 +77,16 @@ def main(resources, train_data):
         BASE_JOB_PREFIX,
         resources['endpoint']['name']
     )
-    data_capture_prefix = "{}/datacapture".format(prefix)
-    s3_capture_upload_path = "s3://{}/{}".format(bucket, data_capture_prefix)
-    _l.info("Capture path: {}".format(s3_capture_upload_path))
-    outputs['monitor'] = {'s3_capture_upload_path': s3_capture_upload_path}
+    if 'monitor' not in resources:
+        raise ValueError("Monitoring not enabled")
+
+    if 's3_capture_upload_path' not in resources['monitor']:
+        raise ValueError("Monitoring not enabled")
+    
+    # data_capture_prefix = "{}/datacapture".format(prefix)
+    # s3_capture_upload_path = "s3://{}/{}".format(bucket, data_capture_prefix)
+    # _l.info("Capture path: {}".format(s3_capture_upload_path))
+    # outputs['monitor'] = {'s3_capture_upload_path': s3_capture_upload_path}
     baseline_prefix = prefix + "/baselining"
     baseline_data_prefix = baseline_prefix + "/data"
     baseline_results_prefix = baseline_prefix + "/results"
@@ -100,24 +106,26 @@ def main(resources, train_data):
     outputs['monitor'].update({'ground truth uri': ground_truth_upload_path})
 
     # load the endpoint
-    predictor = SKLearnPredictor(
-        resources['endpoint']['name'],
-        sagemaker_session=sm_session
-    )
+    # predictor = SKLearnPredictor(
+    #     resources['endpoint']['name'],
+    #     serializer=CSVSerializer(),
+    #     deserializer=CSVDeserializer(),
+    #     sagemaker_session=sm_session
+    # )
 
     # apply the new config to the endpoint, this will recreate the 
     # endpoint container
-    _l.info(f"Enabling data capture on {resources['endpoint']['name']}")
-    predictor.update_data_capture_config(
-        DataCaptureConfig(
-            enable_capture=True, sampling_percentage=100, 
-            destination_s3_uri=s3_capture_upload_path,
-            capture_options=["REQUEST", "RESPONSE"],
-            csv_content_types=["text/csv"],
-            json_content_types=["application/json"],
-            sagemaker_session=sm_session
-        )
-    )
+    # _l.info(f"Enabling data capture on {resources['endpoint']['name']}")
+    # predictor.update_data_capture_config(
+    #     DataCaptureConfig(
+    #         enable_capture=True, sampling_percentage=100, 
+    #         destination_s3_uri=s3_capture_upload_path,
+    #         capture_options=["REQUEST", "RESPONSE"],
+    #         csv_content_types=["text/csv"],
+    #         json_content_types=None,
+    #         sagemaker_session=sm_session
+    #     )
+    # )
 
     # Create a baselining job with training dataset
     _l.info("Executing a baselining job with training dataset")
@@ -136,15 +144,15 @@ def main(resources, train_data):
         wait=True
     )
     baseline_job = my_monitor.latest_baselining_job
-    _l.debug("suggested baseline statistics")
-    _l.debug(
+    _l.info("suggested baseline contrains")
+    _l.info(
         pprint.pformat(
             baseline_job.suggested_constraints().body_dict[
                 "regression_constraints"]
             )
     )
-    _l.debug("suggested baseline statistics")
-    _l.debug(
+    _l.info("suggested baseline statistics")
+    _l.info(
         pprint.pformat(
             baseline_job.baseline_statistics().body_dict[
                 "regression_metrics"]
@@ -158,14 +166,9 @@ def main(resources, train_data):
     outputs['monitor'].update({
         'schedule_name': monitor_schedule_name})
     endpointInput = EndpointInput(
-        predictor.endpoint_name, 
+        resources['endpoint']['name'], 
         "/opt/ml/processing/input_data",
-        inference_attribute='0',
-        # if it runs at 13:00 it analyzes data stating from
-        # 12:00 until max_runtime_in_seconds is hit. This allow to 
-        # set the ground truth labels with 1 hour of difference.
-        start_time_offset='-PT1H',
-        end_time_offset='-PT0H'
+        inference_attribute='0'  # REVIEW:
     )
 
     my_monitor.create_monitoring_schedule(

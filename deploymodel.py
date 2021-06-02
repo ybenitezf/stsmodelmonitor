@@ -6,10 +6,17 @@ needs:
     ROLE_ARN
     AWS_DEFAULT_REGION
 
+Will search for the lastest approved package on MODEL_PACKAGE_GROUP_NAME
+and deploy an endpoint.
+
+If --capture is passed the endpoint will have datacapture enabled
 
 https://docs.amazonaws.cn/en_us/sagemaker/latest/dg/model-registry.html
 """
 from botocore.exceptions import ClientError
+from sagemaker.deserializers import CSVDeserializer
+from sagemaker.model_monitor import DataCaptureConfig
+from sagemaker.serializers import CSVSerializer
 from sagemaker.sklearn.model import SKLearnModel
 from dotenv import load_dotenv
 from sts.utils import get_sm_session
@@ -18,6 +25,7 @@ import os
 import logging
 import datetime
 import json
+import argparse
 
 
 _l = logging.getLogger()
@@ -87,7 +95,7 @@ def get_approved_package(model_package_group_name, sm_client):
 
 
 # def main(baseline_dataset_uri, test_set_uri):
-def main():
+def main(datacapture=False):
     # ####
     # AWS especific
     AWS_DEFAULT_REGION = os.getenv('AWS_DEFAULT_REGION', 'eu-west-1')
@@ -106,8 +114,22 @@ def main():
     MODEL_PACKAGE_GROUP_NAME = os.getenv(
         'MODEL_PACKAGE_GROUP_NAME', 'sts-sklearn-grp')
     BASE_JOB_PREFIX = os.getenv('BASE_JOB_PREFIX', 'sts')
+
+    bucket = sm_session.default_bucket()
+    endpoint_name = "{}-sklearn-{}".format(
+        BASE_JOB_PREFIX,
+        datetime.datetime.now().strftime("%Y%m%d%H%M")
+    )
+    prefix = "{}/{}".format(BASE_JOB_PREFIX, endpoint_name)
+    data_capture_prefix = "{}/datacapture".format(prefix)
+    s3_capture_upload_path = "s3://{}/{}".format(bucket, data_capture_prefix)
     # outputs is a dict to save to json
     outputs = dict()
+
+    if datacapture is True:
+        outputs['monitor'] = {
+            's3_capture_upload_path': s3_capture_upload_path
+        }
 
     # get the last version aproved in the model package group
     model_package_arn = get_approved_package(
@@ -128,70 +150,33 @@ def main():
         framework_version='0.23-1'
     )
 
+    data_capture_config=None
+    if datacapture is True:
+        _l.info("Enabling data capture as requested")
+        _l.info(f"s3_capture_upload_path: {s3_capture_upload_path}")
+        data_capture_config = DataCaptureConfig(
+            enable_capture=True, sampling_percentage=100, 
+            destination_s3_uri=s3_capture_upload_path,
+            capture_options=["REQUEST", "RESPONSE"],
+            sagemaker_session=sm_session
+        )
+
+    # will have datacapture if enabled
     predictor = sk_model.deploy(
         instance_type="ml.m5.xlarge", 
-        initial_instance_count=1
+        initial_instance_count=1,
+        serializer=CSVSerializer(),
+        deserializer=CSVDeserializer(),
+        data_capture_config=data_capture_config,
+        endpoint_name=endpoint_name
     )
 
     _l.info(f"Endpoint name: {predictor.endpoint_name}")
     outputs['endpoint'] = {
-        'name': predictor.endpoint_name,
+        'name': endpoint_name,
         'config_name': predictor.endpoint_name # is the same as the endpoint
     }
     outputs['model_info'].update({"name": sk_model.name})
-    # outputs['model'] = {'model_package_arn': model_package_arn}
-    # description = sm_client.describe_model_package(
-    #     ModelPackageName=model_package_arn)
-    # _l.debug(f"Model package info: {pprint.pformat(description)}")
-
-    # register the model in sagemaker model registry
-    # ahora = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    # model_name = f'sts-model-{ahora}'
-    # outputs['model'].update(name=model_name)
-    # _l.info(f"Model name : {model_name}")
-    # primary_container = {
-    #     'ModelPackageName': model_package_arn,
-    # }
-    # response = sm_client.create_model(
-    #     ModelName=model_name,
-    #     ExecutionRoleArn=ROLE_ARN,
-    #     PrimaryContainer=primary_container
-    # )
-    # _l.debug(f"Create model response: {response}")
-    # _l.info(f"Model ARN: {response.get('ModelArn')}")
-    # -- END register model
-
-    ######  with the model registered we can deploy the endpoint #####
-
-    # Set some paths and vars needed
-
-    # Create an endpoint configuration by calling create_endpoint_config.
-    # The endpoint configuration specifies the number and type of Amazon EC2
-    # instances to use for the endpoint. It can also contain the
-    # DataCaptureConfig
-
-    # endpoint_config_name = f'sts-model-EndpointConfig-{ahora}'
-    # outputs['endpoint'] = {'config_name': endpoint_config_name}
-    # sm_session.create_endpoint_config(
-    #     name=endpoint_config_name,
-    #     model_name=model_name,
-    #     initial_instance_count=1,
-    #     instance_type='ml.m5.xlarge',
-    # )
-
-    # Create the endpoint using the EndPointConfig
-    
-    # endpoint_name = f'sts-model-Endpoint-{ahora}'
-    # outputs['endpoint'].update(name=endpoint_name)
-    # _l.info(f"Endpoint name: {endpoint_name}")
-
-    # sm_session.create_endpoint(
-    #     endpoint_name,
-    #     endpoint_config_name,
-    #     wait=True
-    # )
-
-    # _l.info(f"Endpoint {endpoint_name} ready")
     # ENDPOINT deploy done
 
     # save outputs to a file
@@ -201,16 +186,11 @@ def main():
 
 
 if __name__ == '__main__':
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument(
-    #     "--trainmodel-output", type=str, required=False, 
-    #     default='trainmodel_out.json',
-    #     help="JSON output from the train script"
-    # )
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--capture',
+        action='store_true',
+        help="Enable data capture in the endpoint")
+    args, _ = parser.parse_known_args()
 
-    # args, _ = parser.parse_known_args()
-    # _l.info(f"Using training info {args.trainmodel_output}")
-    # with open(args.trainmodel_output) as f:
-    #     data = json.load(f)
-    # main(data)
-    main()
+    main(datacapture=args.capture)

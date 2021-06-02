@@ -1,11 +1,13 @@
 from sts.utils import load_dataset, get_sm_session
+from sagemaker.deserializers import CSVDeserializer
+from sagemaker.serializers import CSVSerializer
 from sagemaker.sklearn.model import SKLearnPredictor
+from sagemaker_containers.beta.framework import content_types, encoders
 from dotenv import load_dotenv
 import os
 import argparse
 import json
 import progressbar
-import time
 
 
 load_dotenv()
@@ -30,15 +32,15 @@ def main(deploy_data, train_data):
     # Load a predictor using the endpoint name
     predictor = SKLearnPredictor(
         deploy_data['endpoint']['name'],
-        sagemaker_session=sm_session
+        sagemaker_session=sm_session,
+        serializer=CSVSerializer(),
+        deserializer=CSVDeserializer()
     )
 
     # read test data
     test_data = load_dataset(
         train_data['train']['test'], 'test.csv', sagemaker_session=sm_session)
     print(f"Loadding {train_data['train']['test']}")
-    print("Test dataset head:")
-    print(test_data.head())
 
     # remove labels in the test dataset
     test_data.drop(test_data.columns[0], axis=1, inplace=True)
@@ -55,10 +57,7 @@ def main(deploy_data, train_data):
             inference_id = '{}{}'.format(inference_id_prefix, index)
 
             result = predictor.predict(
-                #  Expected 2D array, Reshape your data either using 
-                # array.reshape(-1, 1) if your data has a single feature 
-                # or array.reshape(1, -1) if it contains a single sample.
-                x_test_row.reshape(1,-1),
+                x_test_row,
                 inference_id=inference_id
             )
 
@@ -66,7 +65,7 @@ def main(deploy_data, train_data):
                 {
                     inference_id: {
                         'input': x_test_row.tolist(),
-                        'result': result.tolist()
+                        'result': result
                     }
                 }
             )
