@@ -1,8 +1,10 @@
+"""Send traffic to the endpoint
+
+This uses the test.csv dataset"""
 from sts.utils import load_dataset, get_sm_session
 from sagemaker.deserializers import CSVDeserializer
 from sagemaker.serializers import CSVSerializer
 from sagemaker.sklearn.model import SKLearnPredictor
-from sagemaker_containers.beta.framework import content_types, encoders
 from dotenv import load_dotenv
 import os
 import argparse
@@ -33,8 +35,8 @@ def main(deploy_data, train_data):
     predictor = SKLearnPredictor(
         deploy_data['endpoint']['name'],
         sagemaker_session=sm_session,
-        serializer=CSVSerializer(),
-        deserializer=CSVDeserializer()
+        serializer=CSVSerializer(),  # necesary or MQM don't work
+        deserializer=CSVDeserializer()  # necesary or MQM don't work
     )
 
     # read test data

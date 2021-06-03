@@ -1,4 +1,8 @@
-"""Run to stop the schedule model quality monitor
+"""Cleanup the workspace
+
+- Remove the endpoint
+- Remove the model
+- if exits remove the schedule model monitor
 
 Assumes the shelude is called "mq-mon-sch-sts"
 """

@@ -1,5 +1,5 @@
 """This will be used as an entry point when serving the model"""
-from sagemaker_containers.beta.framework import content_types, encoders, worker
+from sagemaker_containers.beta.framework import content_types, encoders
 import numpy as np
 import joblib
 import os
@@ -27,7 +27,8 @@ def input_fn(input_data, content_type):
     """
     np_array = encoders.decode(input_data, content_type)
     ret = np_array.astype(np.float32) if content_type in content_types.UTF8_TYPES else np_array
-    # reshaping if contains a single sample, necesary if using CSV
+    # reshaping if contains a single sample, necesary if when using CSV as
+    # content_type
     if len(ret.shape) == 1:
         # the model expect a 2D array
         ret = ret.reshape(1,-1)
