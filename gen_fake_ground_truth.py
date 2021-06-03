@@ -1,14 +1,20 @@
+"""Generate fake ground truth to test MQM
+
+requires --capture-prefix with the format YYYY/MM/DD/HH for example
+
+python gen_fake_ground_truth.py --capture-prefix '2021/02/12/13'
+
+with corresponds to the data capture for day 12 of month 2 of year 2021 for
+the 13 hour,  assuming a hourly interval.
+"""
 from sts.utils import load_dataset, get_sm_session
 from sagemaker_containers.beta.framework import content_types, encoders
 from sagemaker.s3 import S3Downloader, S3Uploader
 from dotenv import load_dotenv
-from io import BytesIO
 import os
 import argparse
 import json
 import uuid
-import base64
-import numpy as np
 import random
 
 
@@ -17,6 +23,7 @@ load_dotenv()
 
 def ground_truth_with_id(
         inference_id, predicted, labels, inference_id_prefix):
+    """Given a prediction generate ground truth label"""
     # comment the next line to use the actual label from the inference
     # i am using random here to invalidate some of the values for
     # the quality monitor
@@ -28,10 +35,8 @@ def ground_truth_with_id(
 
     return {
         "groundTruthData": {
-            # encode the inference with the same contentType
-            # "data": encoders.encode(data_label, content_types.CSV),
             "data": data_label,
-            "encoding": "CSV",
+            "encoding": "CSV",  # only supports CSV
         }, 
         "eventMetadata": {
             "eventId": f"{inference_id_prefix}{str(inference_id)}",
@@ -40,9 +45,10 @@ def ground_truth_with_id(
     }
 
 
-def main(deploy_data, train_data, capture_prefix):
-    inference_id_prefix = 'sts_'  # Comes from deploymodel.py
+def main(deploy_data: dict, train_data: dict, capture_prefix: str):
+    inference_id_prefix = 'sts_'  # the same used in testendpoint.py
 
+    # Load config from environment and set required defaults
     # AWS especific
     AWS_DEFAULT_REGION = os.getenv('AWS_DEFAULT_REGION', 'eu-west-1')
     AWS_PROFILE = os.getenv('AWS_PROFILE', 'default')
@@ -62,7 +68,8 @@ def main(deploy_data, train_data, capture_prefix):
     Y_val = test_data.iloc[:, 0].to_numpy()
     print(f"Test dataset shape: {Y_val.shape}")
 
-    # list capture files
+    # list capture files, this is just as an example. Not used right
+    # now but could be.
     capture_files = sorted(
         S3Downloader.list(
             "{}/{}".format(
@@ -71,12 +78,14 @@ def main(deploy_data, train_data, capture_prefix):
             sagemaker_session=sm_session)
     )
     # just the files with the prefix
-    filtered = list(filter(lambda file_name: capture_prefix in file_name, capture_files))
+    filtered = list(filter(
+        lambda file_name: capture_prefix in file_name, capture_files))
     print(f"Detected {len(filtered)} capture files")
 
     capture_records = []
     for c_file in filtered:
         print(f"Processing: {c_file}")
+        # read the capture data directly from S3
         content = S3Downloader.read_file(c_file, sagemaker_session=sm_session)
         records = [json.loads(l) for l in content.split("\n")[:-1]]
 
@@ -94,11 +103,16 @@ def main(deploy_data, train_data, capture_prefix):
         
         # Extract result given by the model
         Y_pred_value = encoders.decode(
-            obj["captureData"]["endpointOutput"]["data"], "text/csv")
+            obj["captureData"]["endpointOutput"]["data"],
+            # i have fixed this value here becouse 
+            # obj["captureData"]["endpointOutput"]["observedContentType"]
+            # some times include the encoding like: text/csv; utf-8
+            # and encoders.decode() will give error.
+            content_types.CSV)
         captured_predictions[req_id] = Y_pred_value  # np.array
 
 
-    # save and upload te files
+    # save and upload the ground truth labels
     print("Generating labels")
     fake_records = []
     for i,label in captured_predictions.items():

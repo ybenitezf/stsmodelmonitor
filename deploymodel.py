@@ -1,10 +1,11 @@
 """Deploy register and deploy model
 
 
-needs:
-    MODEL_PACKAGE_GROUP_NAME
-    ROLE_ARN
-    AWS_DEFAULT_REGION
+config by environment variable:
+
+- MODEL_PACKAGE_GROUP_NAME
+- ROLE_ARN
+- AWS_DEFAULT_REGION
 
 Will search for the lastest approved package on MODEL_PACKAGE_GROUP_NAME
 and deploy an endpoint.
@@ -38,6 +39,7 @@ load_dotenv()
 
 
 def json_default(o):
+    """Dump  datatime to isoformat in json"""
     if isinstance(o, (datetime.date, datetime.datetime)):
         return o.isoformat()
 
@@ -94,9 +96,8 @@ def get_approved_package(model_package_group_name, sm_client):
         raise Exception(error_message)
 
 
-# def main(baseline_dataset_uri, test_set_uri):
 def main(datacapture=False):
-    # ####
+    # Load config from environment and set required defaults
     # AWS especific
     AWS_DEFAULT_REGION = os.getenv('AWS_DEFAULT_REGION', 'eu-west-1')
     AWS_PROFILE = os.getenv('AWS_PROFILE', 'default')
@@ -108,13 +109,13 @@ def main(datacapture=False):
         aws_access_key_id=AWS_ACCESS_KEY_ID,
         aws_secret_access_key=AWS_SECRET_ACCESS_KEY
     )
-
     ROLE_ARN = os.getenv('AWS_ROLE', sagemaker.get_execution_role())
 
     MODEL_PACKAGE_GROUP_NAME = os.getenv(
         'MODEL_PACKAGE_GROUP_NAME', 'sts-sklearn-grp')
     BASE_JOB_PREFIX = os.getenv('BASE_JOB_PREFIX', 'sts')
 
+    # define useful const's
     bucket = sm_session.default_bucket()
     endpoint_name = "{}-sklearn-{}".format(
         BASE_JOB_PREFIX,
@@ -127,6 +128,7 @@ def main(datacapture=False):
     outputs = dict()
 
     if datacapture is True:
+        # if data capture was enabled output the S3 Uri for data capture
         outputs['monitor'] = {
             's3_capture_upload_path': s3_capture_upload_path
         }
@@ -138,7 +140,6 @@ def main(datacapture=False):
     model_info = sm_client.describe_model_package(
         ModelPackageName=model_package_arn)
     outputs['model_info'] = model_info
-
     model_uri = model_info.get(
         'InferenceSpecification')['Containers'][0]['ModelDataUrl']
     _l.info(f"Model data uri: {model_uri}")
@@ -152,6 +153,7 @@ def main(datacapture=False):
 
     data_capture_config=None
     if datacapture is True:
+        # if data capture was enabled generated the required config
         _l.info("Enabling data capture as requested")
         _l.info(f"s3_capture_upload_path: {s3_capture_upload_path}")
         data_capture_config = DataCaptureConfig(
@@ -161,7 +163,7 @@ def main(datacapture=False):
             sagemaker_session=sm_session
         )
 
-    # will have datacapture if enabled
+    # Deploy the endpoint
     predictor = sk_model.deploy(
         instance_type="ml.m5.xlarge", 
         initial_instance_count=1,
@@ -174,12 +176,12 @@ def main(datacapture=False):
     _l.info(f"Endpoint name: {predictor.endpoint_name}")
     outputs['endpoint'] = {
         'name': endpoint_name,
-        'config_name': predictor.endpoint_name # is the same as the endpoint
+        'config_name': predictor.endpoint_name # is the same as the endpoint ?
     }
     outputs['model_info'].update({"name": sk_model.name})
     # ENDPOINT deploy done
 
-    # save outputs to a file
+    # save useful outputs to a file
     with open('deploymodel_out.json', 'w') as f:
         json.dump(outputs, f, default=json_default)
     # --

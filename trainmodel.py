@@ -1,5 +1,7 @@
 """Execute a sagemaker pipeline
 
+Will execute the ML pipeline defined in sts/pipeline.py
+
 This will use the fallowing cofigs from enviroment variables:
 
 - AWS_DEFAULT_REGION

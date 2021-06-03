@@ -2,14 +2,11 @@
 
 Assumes the shelude is called "mq-mon-sch-sts"
 """
-from sagemaker.sklearn.model import SKLearnPredictor
-from sagemaker.model_monitor import DataCaptureConfig
 from sagemaker.model_monitor import ModelQualityMonitor
 from sagemaker.model_monitor import EndpointInput
 from sagemaker.model_monitor import CronExpressionGenerator
 from sagemaker.model_monitor.dataset_format import DatasetFormat
 import sagemaker
-import pandas as pd
 
 from dotenv import load_dotenv
 from sts.utils import get_sm_session
@@ -83,10 +80,6 @@ def main(resources, train_data):
     if 's3_capture_upload_path' not in resources['monitor']:
         raise ValueError("Monitoring not enabled")
     
-    # data_capture_prefix = "{}/datacapture".format(prefix)
-    # s3_capture_upload_path = "s3://{}/{}".format(bucket, data_capture_prefix)
-    # _l.info("Capture path: {}".format(s3_capture_upload_path))
-    # outputs['monitor'] = {'s3_capture_upload_path': s3_capture_upload_path}
     baseline_prefix = prefix + "/baselining"
     baseline_data_prefix = baseline_prefix + "/data"
     baseline_results_prefix = baseline_prefix + "/results"
@@ -104,28 +97,6 @@ def main(resources, train_data):
     ground_truth_upload_path = f"s3://{bucket}/{prefix}/ground_truth_data"
     _l.info(f"Ground truth uri: {ground_truth_upload_path}")
     outputs['monitor'].update({'ground truth uri': ground_truth_upload_path})
-
-    # load the endpoint
-    # predictor = SKLearnPredictor(
-    #     resources['endpoint']['name'],
-    #     serializer=CSVSerializer(),
-    #     deserializer=CSVDeserializer(),
-    #     sagemaker_session=sm_session
-    # )
-
-    # apply the new config to the endpoint, this will recreate the 
-    # endpoint container
-    # _l.info(f"Enabling data capture on {resources['endpoint']['name']}")
-    # predictor.update_data_capture_config(
-    #     DataCaptureConfig(
-    #         enable_capture=True, sampling_percentage=100, 
-    #         destination_s3_uri=s3_capture_upload_path,
-    #         capture_options=["REQUEST", "RESPONSE"],
-    #         csv_content_types=["text/csv"],
-    #         json_content_types=None,
-    #         sagemaker_session=sm_session
-    #     )
-    # )
 
     # Create a baselining job with training dataset
     _l.info("Executing a baselining job with training dataset")
