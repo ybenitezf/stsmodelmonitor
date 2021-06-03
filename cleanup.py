@@ -51,7 +51,7 @@ def main(resources):
     )
 
     # remove resourses created by deploymodel.py and setup_mq.py
-    if 'schedule_name' in resources['monitor']:
+    if 'monitor' in resources and 'schedule_name' in resources['monitor']:
         print("Removing Model Quality Schedule")
         delete_schedule(
             resources['monitor']['schedule_name'],
